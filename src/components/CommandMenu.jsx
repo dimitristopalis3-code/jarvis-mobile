@@ -4,86 +4,60 @@ import { useJarvis } from '../context/JarvisContext';
 
 const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
   const { setActiveMode, playSound, speak } = useJarvis();
-  const [subMenu, setSubMenu] = useState(null); // 'COMMS' or null
+  const [subMenu, setSubMenu] = useState(null); 
 
-  // Configuration
   const radius = 160;
 
-  // --- 1. MAIN MENU ITEMS ---
-  
-  // TOP CROWN (The Media Button)
+  // --- MENU ITEMS ---
   const mainTop = [
-    { 
-      id: 'media', label: 'MEDIA', icon: 'fa-music', angle: 90,
-      action: () => { setActiveMode('MEDIA'); speak("Media player ready."); } 
-    }
+    { id: 'media', label: 'MEDIA', icon: 'fa-music', angle: 90, action: () => { setActiveMode('MEDIA'); speak("Media player ready."); } }
   ];
 
-  // LEFT FLANK (Tactical)
   const mainLeft = [
-    { 
-      id: 'vision', label: 'VISION', icon: 'fa-eye', angle: 140,
-      action: () => { setActiveMode('VISION'); speak("Vision systems active."); }
-    },
-    { 
-      id: 'comms', label: 'COMMS', icon: 'fa-comments', angle: 180,
-      action: () => { setSubMenu('COMMS'); speak("Select communication channel."); } 
-    },
-    { 
-      id: 'hud', label: 'DRIVE', icon: 'fa-car', angle: 220,
-      action: () => { setActiveMode('HUD'); speak("Driving protocols initiated."); } 
-    }
+    { id: 'vision', label: 'VISION', icon: 'fa-eye', angle: 140, action: () => { setActiveMode('VISION'); speak("Vision systems active."); } },
+    { id: 'comms', label: 'COMMS', icon: 'fa-comments', angle: 180, action: () => { setSubMenu('COMMS'); speak("Select communication channel."); } },
+    { id: 'hud', label: 'DRIVE', icon: 'fa-car', angle: 220, action: () => { setActiveMode('HUD'); speak("Driving protocols initiated."); } }
   ];
 
-  // RIGHT FLANK (System)
   const mainRight = [
-    { 
-      id: 'database', label: 'DATABASE', icon: 'fa-database', angle: 40,
-      action: () => { setActiveMode('DATABASE'); speak("Accessing personnel records."); } 
-    },
-    { 
-      id: 'settings', label: 'SYSTEM', icon: 'fa-cog', angle: 0,
-      action: () => { onOpenSettings(); } 
-    },
-    { 
-      id: 'close', label: 'CLOSE', icon: 'fa-times', angle: -40,
-      action: () => { onClose(); } 
-    }
+    { id: 'database', label: 'DATABASE', icon: 'fa-database', angle: 40, action: () => { setActiveMode('DATABASE'); speak("Accessing personnel records."); } },
+    { id: 'settings', label: 'SYSTEM', icon: 'fa-cog', angle: 0, action: () => { onOpenSettings(); } },
+    { id: 'close', label: 'CLOSE', icon: 'fa-times', angle: -40, action: () => { onClose(); } }
   ];
 
-  // --- 2. COMMS SUB-MENU ITEMS ---
   const commsItems = [
     { id: 'whatsapp', label: 'WHATSAPP', icon: 'fab fa-whatsapp', angle: 220, url: 'https://wa.me/' },
     { id: 'messenger', label: 'MESSENGER', icon: 'fab fa-facebook-messenger', angle: 180, url: 'https://m.me/' },
-    { id: 'viber', label: 'VIBER', icon: 'fab fa-viber', angle: 140, url: 'viber://chat' },
+    { id: 'viber', label: 'VIBER', icon: 'fab fa-viber', angle: 140, url: 'viber://forward?text=Status%20Check' }, // Updated Link
     { id: 'facebook', label: 'FACEBOOK', icon: 'fab fa-facebook-f', angle: 90, url: 'https://facebook.com/' },
     { id: 'instagram', label: 'INSTAGRAM', icon: 'fab fa-instagram', angle: 40, url: 'https://instagram.com/' },
     { id: 'x', label: 'X', icon: 'fab fa-x-twitter', angle: 0, url: 'https://x.com/' },
     { id: 'youtube', label: 'YOUTUBE', icon: 'fab fa-youtube', angle: -40, url: 'https://youtube.com/' },
-    { 
-      id: 'back', label: 'BACK', icon: 'fa-undo', angle: -90, 
-      action: () => setSubMenu(null) // Go back to Main
-    }
+    { id: 'back', label: 'BACK', icon: 'fa-undo', angle: -90, action: () => setSubMenu(null) }
   ];
 
-  // Determine which set to show
   const currentItems = subMenu === 'COMMS' ? commsItems : [...mainTop, ...mainLeft, ...mainRight];
 
-  // Helper to calculate X/Y
   const getPosition = (angle) => {
     const radian = (angle * Math.PI) / 180;
-    return {
-      x: Math.cos(radian) * radius,
-      y: Math.sin(radian) * radius * 0.8
-    };
+    return { x: Math.cos(radian) * radius, y: Math.sin(radian) * radius * 0.8 };
   };
 
   const handleAction = (item) => {
     playSound('click');
     
     if (item.url) {
-        window.open(item.url, '_blank');
+        // MOBILE APP FIX:
         speak(`Opening ${item.label}`);
+        
+        // If it's a deep link (viber://), use location.href to force app switch
+        if (item.url.startsWith('viber://') || item.url.startsWith('whatsapp://')) {
+            window.location.href = item.url;
+        } else {
+            // Standard web links
+            window.open(item.url, '_blank');
+        }
+
     } else if (item.action) {
         item.action();
     }
@@ -109,7 +83,6 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
 
             {currentItems.map((item, index) => {
               const pos = getPosition(item.angle);
-              
               return (
                 <motion.button
                   key={item.id}
@@ -127,17 +100,11 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
                     ${item.id === 'close' || item.id === 'back' ? 'border-red-500/50 text-red-500 hover:border-red-500' : 'text-cyan'}
                   `}
                 >
-                  <i className={`fas ${item.icon} text-2xl`}></i>
+                  <i className={`${item.icon} text-2xl`}></i>
                   <span className="font-orbitron text-[8px] tracking-wider mt-1">{item.label}</span>
-                  
                   <div 
                     className="absolute top-1/2 left-1/2 w-[160px] h-[1px] bg-cyan/20 -z-10 origin-left pointer-events-none"
-                    style={{ 
-                      transform: `rotate(${item.angle + 180}deg)`,
-                      width: `${radius}px`,
-                      left: '50%',
-                      top: '50%'
-                    }}
+                    style={{ transform: `rotate(${item.angle + 180}deg)`, width: `${radius}px`, left: '50%', top: '50%' }}
                   />
                 </motion.button>
               );
