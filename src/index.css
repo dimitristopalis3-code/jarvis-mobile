@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Handles the "Notch" on modern phones */
+  --safe-top: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-bottom);
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #000;
+  color: #00E5FF;
+  overflow: hidden; /* Prevents scrolling */
+  touch-action: none; /* Prevents pull-to-refresh on mobile */
+  user-select: none; /* UI doesn't highlight like text */
+  -webkit-tap-highlight-color: transparent;
+  font-family: 'Orbitron', sans-serif;
+}
+
+/* Utility to hide Scrollbars but keep functionality if needed */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
