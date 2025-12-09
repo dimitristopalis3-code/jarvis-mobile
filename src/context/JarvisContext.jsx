@@ -7,11 +7,8 @@ export const JarvisProvider = ({ children }) => {
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [systemStatus, setSystemStatus] = useState("STANDBY"); 
-  const [activeMode, setActiveMode] = useState("HOME"); // HOME, MENU_OPEN, HUD, VISION, etc.
-  
-  // NEW: To broadcast commands to modules (like MediaPanel)
+  const [activeMode, setActiveMode] = useState("HOME"); 
   const [lastCommand, setLastCommand] = useState(null); 
-  
   const [user] = useState({ name: "Jim", access: "Admin" });
   const [battery, setBattery] = useState(100);
   
@@ -20,17 +17,28 @@ export const JarvisProvider = ({ children }) => {
   const [selectedVoiceIndex, setSelectedVoiceIndex] = useState(0);
   const [hudData, setHudData] = useState({ speed: 0, heading: 0, altitude: 0, accuracy: 0 });
 
-  // --- DATABASES ---
-  const [faceDatabase, setFaceDatabase] = useState(() => JSON.parse(localStorage.getItem('jarvis_face_db_v2') || '[]'));
-  const [incidentLog, setIncidentLog] = useState(() => JSON.parse(localStorage.getItem('jarvis_incidents') || '[]'));
-  const [leadsLog, setLeadsLog] = useState(() => JSON.parse(localStorage.getItem('jarvis_leads') || '[]'));
+  // --- SAFER DATABASE LOADING ---
+  // Helper to safely parse JSON or return default
+  const safeLoad = (key, fallback) => {
+    try {
+      const item = localStorage.getItem(key);
+      return item ? JSON.parse(item) : fallback;
+    } catch (e) {
+      console.error(`Error loading ${key}:`, e);
+      return fallback;
+    }
+  };
 
+  const [faceDatabase, setFaceDatabase] = useState(() => safeLoad('jarvis_face_db_v2', []));
+  const [incidentLog, setIncidentLog] = useState(() => safeLoad('jarvis_incidents', []));
+  const [leadsLog, setLeadsLog] = useState(() => safeLoad('jarvis_leads', []));
+
+  // Persistence
   useEffect(() => { localStorage.setItem('jarvis_face_db_v2', JSON.stringify(faceDatabase)); }, [faceDatabase]);
   useEffect(() => { localStorage.setItem('jarvis_incidents', JSON.stringify(incidentLog)); }, [incidentLog]);
   useEffect(() => { localStorage.setItem('jarvis_leads', JSON.stringify(leadsLog)); }, [leadsLog]);
 
   // --- DATABASE ACTIONS ---
-  // (Keeping these identical to before for brevity, logic remains the same)
   const addIncident = (i) => { setIncidentLog(prev => [{...i, id:Date.now(), date:new Date().toLocaleString()}, ...prev]); speak("Incident logged."); };
   const deleteIncident = (id) => setIncidentLog(prev => prev.filter(i => i.id !== id));
   const addLead = (l) => { setLeadsLog(prev => [{...l, id:Date.now(), status:'Potential', dateAdded:new Date().toLocaleDateString()}, ...prev]); speak("Target added."); };
@@ -64,9 +72,6 @@ export const JarvisProvider = ({ children }) => {
   const speak = (text, shouldListenAfter = false) => {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    
-    // NOTE: We do NOT stop listening here anymore to allow full-duplex feel if supported
-    // But usually standard WebSpeech API requires stop/start to avoid echo
     if (isListening) stopListening();
 
     setIsSpeaking(true);
@@ -76,15 +81,12 @@ export const JarvisProvider = ({ children }) => {
     
     u.onend = () => {
       setIsSpeaking(false);
-      if (shouldListenAfter) {
-          // Add small delay to prevent hearing itself
-          setTimeout(() => startListening(), 300);
-      }
+      if (shouldListenAfter) setTimeout(() => startListening(), 300);
     };
     window.speechSynthesis.speak(u);
   };
 
-  // --- VOICE RECOGNITION (THE UPGRADE) ---
+  // --- VOICE RECOGNITION ---
   const recognitionRef = useRef(null);
   const [conversationState, setConversationState] = useState("IDLE");
   const [tempPersonData, setTempPersonData] = useState({});
@@ -93,7 +95,7 @@ export const JarvisProvider = ({ children }) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SR) {
       const recon = new SR();
-      recon.continuous = false; // We use false and auto-restart to simulate continuous
+      recon.continuous = false;
       recon.interimResults = false;
       recon.lang = 'en-US';
 
@@ -102,13 +104,18 @@ export const JarvisProvider = ({ children }) => {
       
       recon.onresult = (event) => {
         const transcript = event.results[0][0].transcript.toLowerCase().trim();
-        console.log("Heard:", transcript);
         processCommand(transcript);
       };
       
       recognitionRef.current = recon;
     }
-  }, [conversationState, tempPersonData, faceDatabase, activeMode]); // Added activeMode dependency
+    // CLEANUP: Stop recognition when component unmounts or updates
+    return () => {
+        if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch(e) {}
+        }
+    };
+  }, [conversationState, activeMode]); // Dependencies
 
   const startListening = () => {
     if (recognitionRef.current && !isSpeaking) {
@@ -120,41 +127,34 @@ export const JarvisProvider = ({ children }) => {
   };
   const toggleListening = () => { if (isListening) stopListening(); else startListening(); };
 
-  // --- SMART COMMAND PROCESSOR ---
+  // --- COMMAND PROCESSOR ---
   const processCommand = (cmd) => {
-    // 1. BROADCAST to Modules (Media/Ops can listen to this)
     setLastCommand({ text: cmd, time: Date.now() });
 
-    // 2. CONVERSATION INTERRUPT
     if (conversationState !== "IDLE") {
         handleConversationResponse(cmd);
         return;
     }
 
-    // 3. WAKE WORD CHECK
-    // If we just hear "Jarvis", we open the menu
     if (cmd === "jarvis" || cmd === "hey jarvis") {
         setActiveMode("MENU_OPEN");
         speak("Sir?", true);
         return;
     }
 
-    // 4. NAVIGATION COMMANDS
     if (cmd.includes("open") || cmd.includes("start") || cmd.includes("let's")) {
         if (cmd.includes("drive") || cmd.includes("hud")) { setActiveMode("HUD"); speak("Driving protocols initiated."); }
-        else if (cmd.includes("vision") || cmd.includes("camera")) { setActiveMode("VISION"); speak("Vision systems active."); }
+        else if (cmd.includes("vision") || cmd.includes("camera")) { setActiveMode("VISION"); speak("Visual sensors active."); }
         else if (cmd.includes("media") || cmd.includes("music")) { setActiveMode("MEDIA"); speak("Media player ready."); }
         else if (cmd.includes("database")) { setActiveMode("DATABASE"); speak("Accessing records."); }
         else if (cmd.includes("ops") || cmd.includes("incident")) { setActiveMode("OPS"); speak("Operations center online."); }
         else if (cmd.includes("recon") || cmd.includes("sales")) { setActiveMode("RECON"); speak("Sales targeting engaged."); }
-        else if (cmd.includes("guardian")) { setActiveMode("GUARDIAN"); } // Panel speaks for itself
-        else if (cmd.includes("comms")) { setActiveMode("MENU_OPEN"); speak("Comms channels open."); } // Comms is in menu
+        else if (cmd.includes("guardian")) { setActiveMode("GUARDIAN"); }
+        else if (cmd.includes("comms")) { setActiveMode("MENU_OPEN"); speak("Comms channels open."); }
     }
     
-    // 5. DEEP LINKS (Maps)
-    else if (cmd.includes("drive home") || cmd.includes("navigate home")) {
+    else if (cmd.includes("drive home")) {
         speak("Setting coordinates for Home Base.");
-        // Replace with your actual address if you want, currently generalized
         window.open("https://www.google.com/maps/dir/?api=1&destination=Home", "_blank");
     }
     else if (cmd.includes("open maps")) {
@@ -162,31 +162,26 @@ export const JarvisProvider = ({ children }) => {
         window.open("https://maps.google.com", "_blank");
     }
 
-    // 6. CLOSING COMMANDS
     else if (cmd.includes("close") || cmd.includes("exit") || cmd.includes("stop")) {
-        // If we are in a module, go back to MENU (Reactor with buttons), not empty Home
         if (activeMode !== "HOME") {
             setActiveMode("MENU_OPEN");
-            speak("Module closed. Anything else, Sir?", true);
+            speak("Module closed. Anything else?", true);
         } else {
-            // If already at menu, minimize to Home
             setActiveMode("HOME");
             speak("Standing by.");
         }
     }
     
-    // 7. CONFIRMATION ("Yes" to "Anything else?")
     else if (cmd.includes("yes") && activeMode === "MENU_OPEN") {
         speak("Awaiting command.", true);
     }
     else if (cmd.includes("no") && activeMode === "MENU_OPEN") {
         setActiveMode("HOME");
-        speak("Very well. Interface minimized.");
+        speak("Interface minimized.");
     }
   };
 
   const handleConversationResponse = (response) => {
-     // (Existing interview logic...)
      const newData = { ...tempPersonData };
      if (conversationState === "ASK_NAME") {
         newData.name = response.replace(/\./g, '');
@@ -212,7 +207,15 @@ export const JarvisProvider = ({ children }) => {
      }
   };
 
-  // ... (Rest of Hooks: Sensors, Battery, HUD - Same as before)
+  const triggerInterview = (faceDescriptor) => {
+    if (conversationState === "SCANNING") {
+        setTempPersonData({ descriptor: faceDescriptor });
+        setConversationState("ASK_NAME");
+        speak("Target captured. Who is this person?", true);
+    }
+  };
+
+  // --- SENSORS ---
   useEffect(() => { 
     if ('getBattery' in navigator) navigator.getBattery().then(b => setBattery(Math.round(b.level * 100))); 
     const geoId = navigator.geolocation.watchPosition(p => setHudData(prev => ({...prev, speed: p.coords.speed ? Math.round(p.coords.speed*3.6) : 0, altitude: Math.round(p.coords.altitude||0) })), e=>{}, {enableHighAccuracy:true});
@@ -221,7 +224,26 @@ export const JarvisProvider = ({ children }) => {
     return () => { navigator.geolocation.clearWatch(geoId); window.removeEventListener('deviceorientation', handleOri); };
   }, []);
 
-  const playSound = (type) => { /* Same sound logic */ };
+  const playSound = (type) => { 
+    try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        if (type === 'click') {
+          osc.frequency.value = 800; gain.gain.value = 0.1;
+          gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+          osc.start(); osc.stop(ctx.currentTime + 0.1);
+        } else if (type === 'startup') {
+          osc.frequency.value = 150; 
+          osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.4);
+          gain.gain.value = 0.1; gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+          osc.start(); osc.stop(ctx.currentTime + 0.4);
+        }
+    } catch (e) {} 
+  };
 
   return (
     <JarvisContext.Provider value={{
@@ -230,7 +252,7 @@ export const JarvisProvider = ({ children }) => {
       conversationState, triggerInterview, 
       faceDatabase, deletePerson, updatePerson, addPerson, clearDatabase,
       hudData, incidentLog, addIncident, deleteIncident, leadsLog, addLead, updateLeadStatus, deleteLead,
-      lastCommand // <--- NEW EXPORT
+      lastCommand 
     }}>
       {children}
     </JarvisContext.Provider>
