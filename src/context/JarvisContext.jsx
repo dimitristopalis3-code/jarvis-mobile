@@ -12,33 +12,31 @@ export const JarvisProvider = ({ children }) => {
   const [user] = useState({ name: "Jim", access: "Admin" });
   const [battery, setBattery] = useState(100);
   
+  // --- SENTINEL MODE (ALWAYS LISTENING FLAG) ---
+  const sentinelMode = useRef(false);
+
   // --- VOICE & SENSORS ---
   const [availableVoices, setAvailableVoices] = useState([]);
   const [selectedVoiceIndex, setSelectedVoiceIndex] = useState(0);
   const [hudData, setHudData] = useState({ speed: 0, heading: 0, altitude: 0, accuracy: 0 });
 
-  // --- SAFER DATABASE LOADING ---
-  // Helper to safely parse JSON or return default
+  // --- DATABASE LOADING (Safe Mode) ---
   const safeLoad = (key, fallback) => {
     try {
       const item = localStorage.getItem(key);
       return item ? JSON.parse(item) : fallback;
-    } catch (e) {
-      console.error(`Error loading ${key}:`, e);
-      return fallback;
-    }
+    } catch (e) { return fallback; }
   };
 
   const [faceDatabase, setFaceDatabase] = useState(() => safeLoad('jarvis_face_db_v2', []));
   const [incidentLog, setIncidentLog] = useState(() => safeLoad('jarvis_incidents', []));
   const [leadsLog, setLeadsLog] = useState(() => safeLoad('jarvis_leads', []));
 
-  // Persistence
   useEffect(() => { localStorage.setItem('jarvis_face_db_v2', JSON.stringify(faceDatabase)); }, [faceDatabase]);
   useEffect(() => { localStorage.setItem('jarvis_incidents', JSON.stringify(incidentLog)); }, [incidentLog]);
   useEffect(() => { localStorage.setItem('jarvis_leads', JSON.stringify(leadsLog)); }, [leadsLog]);
 
-  // --- DATABASE ACTIONS ---
+  // --- ACTIONS ---
   const addIncident = (i) => { setIncidentLog(prev => [{...i, id:Date.now(), date:new Date().toLocaleString()}, ...prev]); speak("Incident logged."); };
   const deleteIncident = (id) => setIncidentLog(prev => prev.filter(i => i.id !== id));
   const addLead = (l) => { setLeadsLog(prev => [{...l, id:Date.now(), status:'Potential', dateAdded:new Date().toLocaleDateString()}, ...prev]); speak("Target added."); };
@@ -72,7 +70,11 @@ export const JarvisProvider = ({ children }) => {
   const speak = (text, shouldListenAfter = false) => {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    if (isListening) stopListening();
+    
+    // Stop listening temporarily so he doesn't hear himself
+    if (isListening) {
+       // Optional: we can stop here, but Sentinel Mode handles the restart
+    }
 
     setIsSpeaking(true);
     const u = new SpeechSynthesisUtterance(text);
@@ -81,12 +83,15 @@ export const JarvisProvider = ({ children }) => {
     
     u.onend = () => {
       setIsSpeaking(false);
-      if (shouldListenAfter) setTimeout(() => startListening(), 300);
+      // Resume listening if needed
+      if (sentinelMode.current || shouldListenAfter) {
+          if (!isListening) startListening();
+      }
     };
     window.speechSynthesis.speak(u);
   };
 
-  // --- VOICE RECOGNITION ---
+  // --- VOICE RECOGNITION (SENTINEL LOOP) ---
   const recognitionRef = useRef(null);
   const [conversationState, setConversationState] = useState("IDLE");
   const [tempPersonData, setTempPersonData] = useState({});
@@ -95,12 +100,24 @@ export const JarvisProvider = ({ children }) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SR) {
       const recon = new SR();
-      recon.continuous = false;
+      recon.continuous = false; // Mobile stability setting
       recon.interimResults = false;
       recon.lang = 'en-US';
 
-      recon.onstart = () => setIsListening(true);
-      recon.onend = () => setIsListening(false);
+      recon.onstart = () => { setIsListening(true); };
+      
+      recon.onend = () => {
+          // If Sentinel Mode is ON, we restart immediately instead of stopping
+          if (sentinelMode.current && !isSpeaking) {
+              setTimeout(() => {
+                  try { recon.start(); } catch (e) {
+                      setTimeout(() => { if(sentinelMode.current) try{ recon.start(); } catch(e){} }, 200);
+                  }
+              }, 100);
+          } else {
+              setIsListening(false);
+          }
+      };
       
       recon.onresult = (event) => {
         const transcript = event.results[0][0].transcript.toLowerCase().trim();
@@ -109,23 +126,26 @@ export const JarvisProvider = ({ children }) => {
       
       recognitionRef.current = recon;
     }
-    // CLEANUP: Stop recognition when component unmounts or updates
-    return () => {
-        if (recognitionRef.current) {
-            try { recognitionRef.current.stop(); } catch(e) {}
-        }
-    };
-  }, [conversationState, activeMode]); // Dependencies
+  }, [conversationState, activeMode, isSpeaking]); 
 
   const startListening = () => {
     if (recognitionRef.current && !isSpeaking) {
         try { recognitionRef.current.start(); } catch (e) {}
     }
   };
-  const stopListening = () => {
-    if (recognitionRef.current) try { recognitionRef.current.stop(); } catch (e) {}
+
+  const toggleListening = () => {
+    if (isListening) {
+        sentinelMode.current = false; // Kill loop
+        setIsListening(false);
+        if(recognitionRef.current) recognitionRef.current.stop();
+        speak("Listening paused.");
+    } else {
+        sentinelMode.current = true; // Start loop
+        startListening();
+        playSound('startup');
+    }
   };
-  const toggleListening = () => { if (isListening) stopListening(); else startListening(); };
 
   // --- COMMAND PROCESSOR ---
   const processCommand = (cmd) => {
@@ -136,12 +156,14 @@ export const JarvisProvider = ({ children }) => {
         return;
     }
 
-    if (cmd === "jarvis" || cmd === "hey jarvis") {
+    // WAKE WORDS
+    if (cmd === "jarvis" || cmd === "hey jarvis" || cmd === "hello") {
         setActiveMode("MENU_OPEN");
         speak("Sir?", true);
         return;
     }
 
+    // NAVIGATION COMMANDS
     if (cmd.includes("open") || cmd.includes("start") || cmd.includes("let's")) {
         if (cmd.includes("drive") || cmd.includes("hud")) { setActiveMode("HUD"); speak("Driving protocols initiated."); }
         else if (cmd.includes("vision") || cmd.includes("camera")) { setActiveMode("VISION"); speak("Visual sensors active."); }
@@ -149,19 +171,21 @@ export const JarvisProvider = ({ children }) => {
         else if (cmd.includes("database")) { setActiveMode("DATABASE"); speak("Accessing records."); }
         else if (cmd.includes("ops") || cmd.includes("incident")) { setActiveMode("OPS"); speak("Operations center online."); }
         else if (cmd.includes("recon") || cmd.includes("sales")) { setActiveMode("RECON"); speak("Sales targeting engaged."); }
-        else if (cmd.includes("guardian")) { setActiveMode("GUARDIAN"); }
-        else if (cmd.includes("comms")) { setActiveMode("MENU_OPEN"); speak("Comms channels open."); }
+        else if (cmd.includes("guardian")) { setActiveMode("GUARDIAN"); } // Panel handles speech
+        else if (cmd.includes("comms")) { setActiveMode("COMMS_MENU"); speak("Comms channels open."); }
     }
     
-    else if (cmd.includes("drive home")) {
+    // MAPS / DRIVE COMMANDS
+    else if (cmd.includes("drive home") || cmd.includes("navigate home")) {
         speak("Setting coordinates for Home Base.");
         window.open("https://www.google.com/maps/dir/?api=1&destination=Home", "_blank");
     }
     else if (cmd.includes("open maps")) {
         speak("Opening global positioning.");
-        window.open("https://maps.google.com", "_blank");
+        window.open("https://www.google.com/maps", "_blank");
     }
 
+    // CLOSING LOGIC
     else if (cmd.includes("close") || cmd.includes("exit") || cmd.includes("stop")) {
         if (activeMode !== "HOME") {
             setActiveMode("MENU_OPEN");
@@ -172,6 +196,7 @@ export const JarvisProvider = ({ children }) => {
         }
     }
     
+    // CONVERSATION LOGIC
     else if (cmd.includes("yes") && activeMode === "MENU_OPEN") {
         speak("Awaiting command.", true);
     }

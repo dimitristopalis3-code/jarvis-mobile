@@ -1,38 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useJarvis } from '../context/JarvisContext';
 
 const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
-  const { setActiveMode, playSound, speak } = useJarvis();
+  const { activeMode, setActiveMode, playSound, speak } = useJarvis();
   const [subMenu, setSubMenu] = useState(null); 
+
+  // Reset submenu when closing or opening main menu
+  useEffect(() => {
+    if (activeMode === 'MENU_OPEN') {
+        setSubMenu(null);
+    }
+  }, [activeMode]);
 
   const radius = 160;
 
-  // --- MAIN MENU ITEMS (8-Point Compass) ---
+  // --- MAIN MENU ITEMS ---
   const mainItems = [
-    // 12 o'clock (Top)
     { id: 'hud', label: 'DRIVE', icon: 'fa-car', angle: -90, action: () => { setActiveMode('HUD'); speak("Driving protocols initiated."); } },
-    
-    // 1-2 o'clock (Top Right)
     { id: 'database', label: 'DATABASE', icon: 'fa-database', angle: -45, action: () => { setActiveMode('DATABASE'); speak("Accessing personnel records."); } },
-    
-    // 3 o'clock (Right)
     { id: 'recon', label: 'RECON', icon: 'fa-search-location', angle: 0, action: () => { setActiveMode('RECON'); speak("Sales targeting engaged."); } },
-    
-    // 4-5 o'clock (Bottom Right)
     { id: 'ops', label: 'OPS LOG', icon: 'fa-file-medical-alt', angle: 45, action: () => { setActiveMode('OPS'); speak("Operations center online."); } },
-    
-    // 6 o'clock (Bottom)
     { id: 'media', label: 'MEDIA', icon: 'fa-music', angle: 90, action: () => { setActiveMode('MEDIA'); speak("Media player ready."); } },
-    
-    // 7-8 o'clock (Bottom Left)
     { id: 'vision', label: 'VISION', icon: 'fa-eye', angle: 135, action: () => { setActiveMode('VISION'); speak("Vision systems active."); } },
-    
-    // 9 o'clock (Left)
     { id: 'guardian', label: 'GUARDIAN', icon: 'fa-shield-alt', angle: 180, action: () => { setActiveMode('GUARDIAN'); } },
-    
-    // 10-11 o'clock (Top Left)
-    { id: 'comms', label: 'COMMS', icon: 'fa-comments', angle: 225, action: () => { setSubMenu('COMMS'); speak("Comms open."); } }
+    { id: 'comms', label: 'COMMS', icon: 'fa-comments', angle: 225, action: () => { setActiveMode('COMMS_MENU'); speak("Comms open."); } }
   ];
 
   // --- COMMS SUB-MENU ---
@@ -44,18 +36,17 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
     { id: 'instagram', label: 'INSTAGRAM', icon: 'fab fa-instagram', angle: 45, url: 'https://instagram.com/' },
     { id: 'x', label: 'X', icon: 'fab fa-x-twitter', angle: 0, url: 'https://x.com/' },
     { id: 'youtube', label: 'YOUTUBE', icon: 'fab fa-youtube', angle: -45, url: 'https://youtube.com/' },
-    { id: 'back', label: 'BACK', icon: 'fa-undo', angle: -90, action: () => setSubMenu(null) }
+    { id: 'back', label: 'BACK', icon: 'fa-undo', angle: -90, action: () => { setActiveMode('MENU_OPEN'); } }
   ];
 
-  const currentItems = subMenu === 'COMMS' ? commsItems : mainItems;
+  // FIX: Direct Priority Check
+  // If voice says 'COMMS_MENU' OR manual click says 'COMMS', show comms items.
+  const isCommsActive = activeMode === 'COMMS_MENU' || subMenu === 'COMMS';
+  const currentItems = isCommsActive ? commsItems : mainItems;
 
   const getPosition = (angle) => {
-    // Convert degrees to radians
     const radian = (angle * Math.PI) / 180;
-    return { 
-      x: Math.cos(radian) * radius, 
-      y: Math.sin(radian) * radius * 0.8 // 0.8 squashes height slightly for 3D effect
-    };
+    return { x: Math.cos(radian) * radius, y: Math.sin(radian) * radius * 0.8 };
   };
 
   const handleAction = (item) => {
@@ -67,11 +58,6 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
     } else if (item.action) {
         item.action();
     }
-    
-    if (item.id !== 'comms' && item.id !== 'back') {
-        onClose();
-        setSubMenu(null); 
-    }
   };
 
   return (
@@ -82,12 +68,10 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 backdrop-blur-[2px]"
-          onClick={() => { onClose(); setSubMenu(null); }}
+          onClick={() => { onClose(); }}
         >
           <div className="relative w-0 h-0 flex items-center justify-center" onClick={e => e.stopPropagation()}>
-            {/* Center Close Trigger */}
-            <div className="absolute w-32 h-32 rounded-full cursor-pointer" onClick={() => { onClose(); setSubMenu(null); }} />
-
+            <div className="absolute w-32 h-32 rounded-full cursor-pointer" onClick={() => { onClose(); }} />
             {currentItems.map((item, index) => {
               const pos = getPosition(item.angle);
               return (

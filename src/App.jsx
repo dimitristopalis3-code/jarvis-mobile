@@ -22,8 +22,8 @@ const JarvisInterface = () => {
   const [started, setStarted] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
-  // Logic to control Menu based on Voice State
-  const showMenu = activeMode === 'MENU_OPEN';
+  // FIX: Show menu if we are in generic Menu OR Comms Menu
+  const showMenu = activeMode === 'MENU_OPEN' || activeMode === 'COMMS_MENU';
 
   const handleStart = () => {
     playSound('startup');
@@ -73,8 +73,8 @@ const JarvisInterface = () => {
         </div>
       </div>
 
-      {/* 4. MICROPHONE BUTTON (Only in HOME/MENU) */}
-      {(activeMode === 'HOME' || activeMode === 'MENU_OPEN') && (
+      {/* 4. MICROPHONE BUTTON */}
+      {(activeMode === 'HOME' || activeMode === 'MENU_OPEN' || activeMode === 'COMMS_MENU') && (
         <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20">
           <button 
             onClick={toggleListening}
@@ -95,7 +95,7 @@ const JarvisInterface = () => {
       <div className="absolute bottom-8 w-full text-center z-20 pointer-events-none">
          <div className="text-cyan font-orbitron tracking-[4px] text-sm animate-pulse">{systemStatus}</div>
          <div className="text-cyan-dim text-[10px] mt-1 font-mono">
-            {isListening ? "LISTENING..." : activeMode === 'MENU_OPEN' ? "AWAITING SELECTION" : activeMode}
+            {isListening ? "LISTENING..." : activeMode.includes('MENU') ? "AWAITING SELECTION" : activeMode}
          </div>
       </div>
 
