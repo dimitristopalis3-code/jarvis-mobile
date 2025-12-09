@@ -1,9 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useJarvis } from '../context/JarvisContext';
-import { saveTrack, getTracks, deleteTrack } from '../utils/db'; // Import DB helpers
+import { saveTrack, getTracks, deleteTrack } from '../utils/db'; 
 
 const MediaPanel = () => {
-  const { setActiveMode, speak, playSound, lastCommand } = useJarvis(); // We will add lastCommand to context later
+  const { setActiveMode, speak, playSound, lastCommand } = useJarvis(); 
   const audioRef = useRef(null);
   const [playlist, setPlaylist] = useState([]);
   const [currentTrack, setCurrentTrack] = useState(-1);
@@ -14,29 +14,35 @@ const MediaPanel = () => {
   // 1. LOAD SAVED TRACKS ON START
   useEffect(() => {
     const loadSaved = async () => {
-      const tracks = await getTracks();
-      if (tracks.length > 0) {
-        // Convert stored Blobs back to URLs
-        const playableTracks = tracks.map(t => ({
-            ...t,
-            url: URL.createObjectURL(t.file)
-        }));
-        setPlaylist(playableTracks);
-        // If we have tracks, select the first one but don't play yet
-        setCurrentTrack(0);
+      try {
+        const tracks = await getTracks();
+        if (tracks && tracks.length > 0) {
+          // Re-create URLs fresh every time we open
+          const playableTracks = tracks.map(t => ({
+              ...t,
+              url: URL.createObjectURL(t.file)
+          }));
+          setPlaylist(playableTracks);
+          setCurrentTrack(0);
+        }
+      } catch (e) {
+        console.error("DB Error:", e);
+        speak("Database access error.");
       }
     };
     loadSaved();
-  }, []);
 
-  // 2. VOICE COMMAND LISTENER
-  // This watches the "lastCommand" from the Brain and reacts if it sees media keywords
+    // CLEANUP: Free memory when closing panel
+    return () => {
+        playlist.forEach(t => URL.revokeObjectURL(t.url));
+    };
+  }, []); // Run once on mount
+
+  // 2. VOICE LISTENER
   useEffect(() => {
     if (!lastCommand) return;
     const cmd = lastCommand.text;
-    const time = lastCommand.time; // timestamp to ensure we don't re-run old commands
-
-    // Only react to fresh commands (within last 2 seconds)
+    const time = lastCommand.time; 
     if (Date.now() - time > 2000) return;
 
     if (cmd.includes('play music') || cmd.includes('resume')) {
@@ -55,39 +61,41 @@ const MediaPanel = () => {
             speak("Audio paused.");
         }
     }
-    else if (cmd.includes('next')) {
-        nextTrack();
-        speak("Skipping track.");
-    }
-    else if (cmd.includes('previous')) {
-        prevTrack();
-    }
+    else if (cmd.includes('next')) { nextTrack(); speak("Skipping."); }
+    else if (cmd.includes('previous')) { prevTrack(); }
   }, [lastCommand]);
 
-  // 3. FILE UPLOAD (With Persistence)
+  // 3. FILE UPLOAD (ROBUST)
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
-      speak("Processing audio files.");
+      speak("Processing audio files. Please wait.");
+      
       const newTracks = [];
       
       for (const file of files) {
           const track = {
-              id: Date.now() + Math.random(), // Unique ID
+              id: Date.now() + Math.random(), 
               name: file.name.replace(/\.[^/.]+$/, ""),
-              file: file // Store the raw blob
+              file: file 
           };
           
-          await saveTrack(track); // Save to IndexedDB
-          
-          newTracks.push({
-              ...track,
-              url: URL.createObjectURL(file)
-          });
+          try {
+            // Wait for DB to confirm save before adding to UI
+            await saveTrack(track); 
+            
+            newTracks.push({
+                ...track,
+                url: URL.createObjectURL(file)
+            });
+          } catch(err) {
+            console.error("Save failed", err);
+            speak("Error saving file.");
+          }
       }
 
       setPlaylist(prev => [...prev, ...newTracks]);
-      speak(`${files.length} tracks added to database.`);
+      speak(`${files.length} tracks saved to database.`);
       
       if (currentTrack === -1) setCurrentTrack(0);
     }
@@ -95,7 +103,7 @@ const MediaPanel = () => {
 
   const handleDelete = async (index) => {
       const track = playlist[index];
-      await deleteTrack(track.id); // Remove from DB
+      await deleteTrack(track.id); 
       const newPlaylist = [...playlist];
       newPlaylist.splice(index, 1);
       setPlaylist(newPlaylist);
@@ -107,7 +115,7 @@ const MediaPanel = () => {
     if (currentTrack >= 0 && currentTrack < playlist.length) {
       if (audioRef.current) {
         audioRef.current.src = playlist[currentTrack].url;
-        if(isPlaying) audioRef.current.play(); // Only auto-play if we were already playing or just clicked
+        if(isPlaying) audioRef.current.play(); 
       }
     }
   }, [currentTrack]);

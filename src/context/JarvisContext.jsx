@@ -12,7 +12,7 @@ export const JarvisProvider = ({ children }) => {
   const [user] = useState({ name: "Jim", access: "Admin" });
   const [battery, setBattery] = useState(100);
   
-  // --- SENTINEL MODE (ALWAYS LISTENING FLAG) ---
+  // --- SENTINEL MODE ---
   const sentinelMode = useRef(false);
 
   // --- VOICE & SENSORS ---
@@ -20,7 +20,7 @@ export const JarvisProvider = ({ children }) => {
   const [selectedVoiceIndex, setSelectedVoiceIndex] = useState(0);
   const [hudData, setHudData] = useState({ speed: 0, heading: 0, altitude: 0, accuracy: 0 });
 
-  // --- DATABASE LOADING (Safe Mode) ---
+  // --- DATABASE LOADING ---
   const safeLoad = (key, fallback) => {
     try {
       const item = localStorage.getItem(key);
@@ -71,9 +71,9 @@ export const JarvisProvider = ({ children }) => {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     
-    // Stop listening temporarily so he doesn't hear himself
-    if (isListening) {
-       // Optional: we can stop here, but Sentinel Mode handles the restart
+    // On mobile, stopping recognition before speaking helps prevent echo
+    if (isListening && recognitionRef.current) {
+       try { recognitionRef.current.stop(); } catch(e){}
     }
 
     setIsSpeaking(true);
@@ -83,15 +83,15 @@ export const JarvisProvider = ({ children }) => {
     
     u.onend = () => {
       setIsSpeaking(false);
-      // Resume listening if needed
+      // If Sentinel Mode is active OR shouldListenAfter is true, restart mic
       if (sentinelMode.current || shouldListenAfter) {
-          if (!isListening) startListening();
+          setTimeout(() => startListening(), 500); // 500ms pause before restarting
       }
     };
     window.speechSynthesis.speak(u);
   };
 
-  // --- VOICE RECOGNITION (SENTINEL LOOP) ---
+  // --- VOICE RECOGNITION (STABILIZED) ---
   const recognitionRef = useRef(null);
   const [conversationState, setConversationState] = useState("IDLE");
   const [tempPersonData, setTempPersonData] = useState({});
@@ -100,20 +100,21 @@ export const JarvisProvider = ({ children }) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SR) {
       const recon = new SR();
-      recon.continuous = false; // Mobile stability setting
+      recon.continuous = false; 
       recon.interimResults = false;
       recon.lang = 'en-US';
 
       recon.onstart = () => { setIsListening(true); };
       
       recon.onend = () => {
-          // If Sentinel Mode is ON, we restart immediately instead of stopping
+          // If Sentinel Mode is ON, we restart.
           if (sentinelMode.current && !isSpeaking) {
+              // Increase delay to 500ms to allow mobile audio driver to reset
               setTimeout(() => {
                   try { recon.start(); } catch (e) {
-                      setTimeout(() => { if(sentinelMode.current) try{ recon.start(); } catch(e){} }, 200);
+                      setTimeout(() => { if(sentinelMode.current) try{ recon.start(); } catch(e){} }, 500);
                   }
-              }, 100);
+              }, 500);
           } else {
               setIsListening(false);
           }
@@ -136,12 +137,12 @@ export const JarvisProvider = ({ children }) => {
 
   const toggleListening = () => {
     if (isListening) {
-        sentinelMode.current = false; // Kill loop
+        sentinelMode.current = false;
         setIsListening(false);
         if(recognitionRef.current) recognitionRef.current.stop();
         speak("Listening paused.");
     } else {
-        sentinelMode.current = true; // Start loop
+        sentinelMode.current = true;
         startListening();
         playSound('startup');
     }
@@ -156,14 +157,12 @@ export const JarvisProvider = ({ children }) => {
         return;
     }
 
-    // WAKE WORDS
     if (cmd === "jarvis" || cmd === "hey jarvis" || cmd === "hello") {
         setActiveMode("MENU_OPEN");
         speak("Sir?", true);
         return;
     }
 
-    // NAVIGATION COMMANDS
     if (cmd.includes("open") || cmd.includes("start") || cmd.includes("let's")) {
         if (cmd.includes("drive") || cmd.includes("hud")) { setActiveMode("HUD"); speak("Driving protocols initiated."); }
         else if (cmd.includes("vision") || cmd.includes("camera")) { setActiveMode("VISION"); speak("Visual sensors active."); }
@@ -171,12 +170,11 @@ export const JarvisProvider = ({ children }) => {
         else if (cmd.includes("database")) { setActiveMode("DATABASE"); speak("Accessing records."); }
         else if (cmd.includes("ops") || cmd.includes("incident")) { setActiveMode("OPS"); speak("Operations center online."); }
         else if (cmd.includes("recon") || cmd.includes("sales")) { setActiveMode("RECON"); speak("Sales targeting engaged."); }
-        else if (cmd.includes("guardian")) { setActiveMode("GUARDIAN"); } // Panel handles speech
+        else if (cmd.includes("guardian")) { setActiveMode("GUARDIAN"); }
         else if (cmd.includes("comms")) { setActiveMode("COMMS_MENU"); speak("Comms channels open."); }
     }
     
-    // MAPS / DRIVE COMMANDS
-    else if (cmd.includes("drive home") || cmd.includes("navigate home")) {
+    else if (cmd.includes("drive home")) {
         speak("Setting coordinates for Home Base.");
         window.open("https://www.google.com/maps/dir/?api=1&destination=Home", "_blank");
     }
@@ -185,7 +183,6 @@ export const JarvisProvider = ({ children }) => {
         window.open("https://www.google.com/maps", "_blank");
     }
 
-    // CLOSING LOGIC
     else if (cmd.includes("close") || cmd.includes("exit") || cmd.includes("stop")) {
         if (activeMode !== "HOME") {
             setActiveMode("MENU_OPEN");
@@ -196,7 +193,6 @@ export const JarvisProvider = ({ children }) => {
         }
     }
     
-    // CONVERSATION LOGIC
     else if (cmd.includes("yes") && activeMode === "MENU_OPEN") {
         speak("Awaiting command.", true);
     }
@@ -207,6 +203,7 @@ export const JarvisProvider = ({ children }) => {
   };
 
   const handleConversationResponse = (response) => {
+     // (Same interview logic as before)
      const newData = { ...tempPersonData };
      if (conversationState === "ASK_NAME") {
         newData.name = response.replace(/\./g, '');

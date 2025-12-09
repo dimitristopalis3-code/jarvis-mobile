@@ -6,9 +6,11 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
   const { activeMode, setActiveMode, playSound, speak } = useJarvis();
   const [subMenu, setSubMenu] = useState(null); 
 
-  // Reset submenu when closing or opening main menu
+  // Sync Local State with Global Context
   useEffect(() => {
-    if (activeMode === 'MENU_OPEN') {
+    if (activeMode === 'COMMS_MENU') {
+        setSubMenu('COMMS');
+    } else {
         setSubMenu(null);
     }
   }, [activeMode]);
@@ -24,6 +26,7 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
     { id: 'media', label: 'MEDIA', icon: 'fa-music', angle: 90, action: () => { setActiveMode('MEDIA'); speak("Media player ready."); } },
     { id: 'vision', label: 'VISION', icon: 'fa-eye', angle: 135, action: () => { setActiveMode('VISION'); speak("Vision systems active."); } },
     { id: 'guardian', label: 'GUARDIAN', icon: 'fa-shield-alt', angle: 180, action: () => { setActiveMode('GUARDIAN'); } },
+    // Manual click sets mode globally now
     { id: 'comms', label: 'COMMS', icon: 'fa-comments', angle: 225, action: () => { setActiveMode('COMMS_MENU'); speak("Comms open."); } }
   ];
 
@@ -36,13 +39,13 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
     { id: 'instagram', label: 'INSTAGRAM', icon: 'fab fa-instagram', angle: 45, url: 'https://instagram.com/' },
     { id: 'x', label: 'X', icon: 'fab fa-x-twitter', angle: 0, url: 'https://x.com/' },
     { id: 'youtube', label: 'YOUTUBE', icon: 'fab fa-youtube', angle: -45, url: 'https://youtube.com/' },
+    // Back button resets global mode
     { id: 'back', label: 'BACK', icon: 'fa-undo', angle: -90, action: () => { setActiveMode('MENU_OPEN'); } }
   ];
 
-  // FIX: Direct Priority Check
-  // If voice says 'COMMS_MENU' OR manual click says 'COMMS', show comms items.
-  const isCommsActive = activeMode === 'COMMS_MENU' || subMenu === 'COMMS';
-  const currentItems = isCommsActive ? commsItems : mainItems;
+  // Determine items based on ACTIVE MODE
+  const showComms = activeMode === 'COMMS_MENU';
+  const currentItems = showComms ? commsItems : mainItems;
 
   const getPosition = (angle) => {
     const radian = (angle * Math.PI) / 180;
