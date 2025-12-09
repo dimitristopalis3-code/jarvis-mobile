@@ -4,7 +4,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot } from 'firebase/firestore';
 
-// --- FIREBASE CONFIG (From your provided code) ---
+// --- FIREBASE CONFIG ---
 const firebaseConfig = {
     apiKey: "AIzaSyBwhzGsK-ah7ObMOgpRDlzGghycLNinm6g",
     authDomain: "tforce-guardian-system.firebaseapp.com",
@@ -25,7 +25,7 @@ const GuardianPanel = () => {
   // State
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('live'); // 'live' or 'logs'
+  const [view, setView] = useState('live'); 
   const [units, setUnits] = useState([]);
   const [logs, setLogs] = useState([]);
   
@@ -34,15 +34,21 @@ const GuardianPanel = () => {
   const [pass, setPass] = useState('');
   const [error, setError] = useState('');
 
-  // 1. AUTH LISTENER
+  // 1. AUTH LISTENER (With Audio Fix)
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
         setUser(u);
         setLoading(false);
-        if(u) speak("Guardian uplink established.");
+        
+        // FIX: Add a delay so the UI renders first, preventing audio stutter
+        if(u) {
+            setTimeout(() => {
+                speak("Guardian uplink established.");
+            }, 800); // 800ms delay to let the heavy data load first
+        }
     });
     return () => unsub();
-  }, [speak]);
+  }, [speak]); // Removed 'speak' from dependency if it causes loops, but 'speak' is stable in context.
 
   // 2. LIVE FEED LISTENER
   useEffect(() => {
@@ -53,7 +59,6 @@ const GuardianPanel = () => {
         const now = new Date();
         const active = data.filter(u => {
             if(!u.timestamp || !u.timestamp.toDate) return false;
-            // Filter: On Duty AND signal within last 60 mins
             const diff = (now - u.timestamp.toDate()) / 1000 / 60;
             return u.onDuty && diff < 60;
         });
@@ -68,7 +73,6 @@ const GuardianPanel = () => {
 
     const unsub = onSnapshot(collection(db, 'scan_logs'), snap => {
         let data = snap.docs.map(d => ({id:d.id, ...d.data()}));
-        // Sort descending by time
         data.sort((a,b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
         setLogs(data.slice(0, 50));
     });
@@ -82,7 +86,7 @@ const GuardianPanel = () => {
         await signInWithEmailAndPassword(auth, email, pass);
     } catch (err) {
         setError("Access Denied: " + err.message);
-        playSound('error'); // Assuming you might add an error sound later, or use existing
+        playSound('error'); 
     }
   };
 
@@ -172,7 +176,7 @@ const GuardianPanel = () => {
                                 <div className="bg-black p-2 mt-3 font-mono text-xs text-red-400 border border-white/10 flex justify-between items-center">
                                     <span>{u.latitude?.toFixed(4)}, {u.longitude?.toFixed(4)}</span>
                                     <a 
-                                        href={`http://googleusercontent.com/maps.google.com/4{u.latitude},${u.longitude}`} 
+                                        href={`http://googleusercontent.com/maps.google.com/5{u.latitude},${u.longitude}`} 
                                         target="_blank" 
                                         rel="noreferrer"
                                         className="text-white hover:text-red-500"
