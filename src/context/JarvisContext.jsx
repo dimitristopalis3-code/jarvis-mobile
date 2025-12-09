@@ -4,7 +4,6 @@ const JarvisContext = createContext();
 
 export const JarvisProvider = ({ children }) => {
   // --- CORE STATE ---
-  // isListening = The VISUAL state (Is the mic button red?)
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [systemStatus, setSystemStatus] = useState("STANDBY"); 
@@ -72,11 +71,9 @@ export const JarvisProvider = ({ children }) => {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     
-    // Stop listening temporarily so he doesn't hear himself
-    // BUT do not change isListening visual state
-    if (recognitionRef.current) {
-       try { recognitionRef.current.stop(); } catch(e){}
-    }
+    // We intentionally DO NOT stop the recognition engine here anymore.
+    // Stopping it causes the "Blip" sound when we restart it.
+    // Instead, we just let it run. If it picks up the robot voice, so be it (it usually filters echo).
 
     setIsSpeaking(true);
     const u = new SpeechSynthesisUtterance(text);
@@ -85,15 +82,15 @@ export const JarvisProvider = ({ children }) => {
     
     u.onend = () => {
       setIsSpeaking(false);
-      // If Sentinel Mode is active OR shouldListenAfter is true, restart mic
+      // If Sentinel Mode is active OR shouldListenAfter is true, ensure we are listening
       if (sentinelMode.current || shouldListenAfter) {
-          setTimeout(() => startListening(), 200); 
+          if (!isListening) startListening();
       }
     };
     window.speechSynthesis.speak(u);
   };
 
-  // --- VOICE RECOGNITION (NO FLICKER VERSION) ---
+  // --- VOICE RECOGNITION (CONTINUOUS MODE) ---
   const recognitionRef = useRef(null);
   const [conversationState, setConversationState] = useState("IDLE");
   const [tempPersonData, setTempPersonData] = useState({});
@@ -102,63 +99,64 @@ export const JarvisProvider = ({ children }) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SR) {
       const recon = new SR();
-      recon.continuous = false; // Mobile friendly
+      
+      // CRITICAL FIX: Set to TRUE to prevent constant start/stop blipping
+      recon.continuous = true; 
       recon.interimResults = false;
       recon.lang = 'en-US';
 
-      recon.onstart = () => {
-          // Hardware started
-      };
+      recon.onstart = () => { setIsListening(true); };
       
       recon.onend = () => {
-          // CRITICAL FIX: If we want to be listening, DO NOT set state to false.
-          // Just silently restart.
-          if (sentinelMode.current && !isSpeaking) {
+          // If the OS kills the mic (timeout), restart it gently
+          if (sentinelMode.current) {
               setTimeout(() => {
                   try { recon.start(); } catch (e) {
-                      // Retry if fail
-                      setTimeout(() => { if(sentinelMode.current) try{ recon.start(); } catch(e){} }, 200);
+                      // Retry
+                      setTimeout(() => { if(sentinelMode.current) try{ recon.start(); } catch(e){} }, 500);
                   }
-              }, 200);
+              }, 500);
           } else {
-              // Only turn off the visual UI if we REALLY stopped (user clicked stop)
-              if (!sentinelMode.current) setIsListening(false);
+              setIsListening(false);
           }
       };
       
       recon.onresult = (event) => {
-        const transcript = event.results[0][0].transcript.toLowerCase().trim();
+        // In continuous mode, results stack up. We take the latest one.
+        const lastIdx = event.results.length - 1;
+        const transcript = event.results[lastIdx][0].transcript.toLowerCase().trim();
         processCommand(transcript);
       };
       
       recognitionRef.current = recon;
     }
-  }, [conversationState, activeMode, isSpeaking]); 
+  }, [conversationState, activeMode]); 
 
   const startListening = () => {
-    if (recognitionRef.current && !isSpeaking) {
+    if (recognitionRef.current) {
         try { recognitionRef.current.start(); } catch (e) {}
     }
   };
 
   const toggleListening = () => {
     if (isListening) {
-        // STOPPING
-        sentinelMode.current = false; // Flag OFF
-        setIsListening(false); // Visual OFF
-        if(recognitionRef.current) recognitionRef.current.stop(); // Hardware OFF
+        sentinelMode.current = false;
+        setIsListening(false);
+        if(recognitionRef.current) recognitionRef.current.stop();
         speak("Listening paused.");
     } else {
-        // STARTING
-        sentinelMode.current = true; // Flag ON
-        setIsListening(true); // Visual ON immediately
-        startListening(); // Hardware ON
+        sentinelMode.current = true;
+        setIsListening(true);
+        startListening();
         playSound('startup');
     }
   };
 
   // --- COMMAND PROCESSOR ---
   const processCommand = (cmd) => {
+    // Basic echo cancellation: Ignore commands if Jarvis is currently speaking
+    if (isSpeaking) return;
+
     setLastCommand({ text: cmd, time: Date.now() });
 
     if (conversationState !== "IDLE") {
