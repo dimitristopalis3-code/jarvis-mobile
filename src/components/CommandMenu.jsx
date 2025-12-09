@@ -19,16 +19,19 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
     { id: 'hud', label: 'DRIVE', icon: 'fa-car', angle: 220, action: () => { setActiveMode('HUD'); speak("Driving protocols initiated."); } }
   ];
 
+  // Right Side: Database, Ops, Recon
   const mainRight = [
-    { id: 'database', label: 'DATABASE', icon: 'fa-database', angle: 40, action: () => { setActiveMode('DATABASE'); speak("Accessing personnel records."); } },
-    { id: 'settings', label: 'SYSTEM', icon: 'fa-cog', angle: 0, action: () => { onOpenSettings(); } },
-    { id: 'close', label: 'CLOSE', icon: 'fa-times', angle: -40, action: () => { onClose(); } }
+    { id: 'ops', label: 'OPS LOG', icon: 'fa-file-medical-alt', angle: 40, action: () => { setActiveMode('OPS'); speak("Operations center online."); } },
+    { id: 'recon', label: 'RECON', icon: 'fa-search-location', angle: 0, action: () => { setActiveMode('RECON'); speak("Sales targeting engaged."); } },
+    { id: 'database', label: 'DATABASE', icon: 'fa-database', angle: -40, action: () => { setActiveMode('DATABASE'); speak("Accessing personnel records."); } }
   ];
+
+  // Note: Settings is now accessed via top-right gear only, to make room in the ring.
 
   const commsItems = [
     { id: 'whatsapp', label: 'WHATSAPP', icon: 'fab fa-whatsapp', angle: 220, url: 'https://wa.me/' },
     { id: 'messenger', label: 'MESSENGER', icon: 'fab fa-facebook-messenger', angle: 180, url: 'https://m.me/' },
-    { id: 'viber', label: 'VIBER', icon: 'fab fa-viber', angle: 140, url: 'viber://forward?text=Status%20Check' }, // Updated Link
+    { id: 'viber', label: 'VIBER', icon: 'fab fa-viber', angle: 140, url: 'viber://forward?text=Status%20Check' },
     { id: 'facebook', label: 'FACEBOOK', icon: 'fab fa-facebook-f', angle: 90, url: 'https://facebook.com/' },
     { id: 'instagram', label: 'INSTAGRAM', icon: 'fab fa-instagram', angle: 40, url: 'https://instagram.com/' },
     { id: 'x', label: 'X', icon: 'fab fa-x-twitter', angle: 0, url: 'https://x.com/' },
@@ -45,24 +48,15 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
 
   const handleAction = (item) => {
     playSound('click');
-    
     if (item.url) {
-        // MOBILE APP FIX:
         speak(`Opening ${item.label}`);
-        
-        // If it's a deep link (viber://), use location.href to force app switch
-        if (item.url.startsWith('viber://') || item.url.startsWith('whatsapp://')) {
-            window.location.href = item.url;
-        } else {
-            // Standard web links
-            window.open(item.url, '_blank');
-        }
-
+        if (item.url.startsWith('viber://') || item.url.startsWith('whatsapp://')) window.location.href = item.url;
+        else window.open(item.url, '_blank');
     } else if (item.action) {
         item.action();
     }
     
-    if (item.id !== 'comms' && item.id !== 'back' && item.id !== 'settings') {
+    if (item.id !== 'comms' && item.id !== 'back') {
         onClose();
         setSubMenu(null); 
     }
@@ -80,7 +74,6 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
         >
           <div className="relative w-0 h-0 flex items-center justify-center" onClick={e => e.stopPropagation()}>
             <div className="absolute w-32 h-32 rounded-full cursor-pointer" onClick={() => { onClose(); setSubMenu(null); }} />
-
             {currentItems.map((item, index) => {
               const pos = getPosition(item.angle);
               return (
@@ -100,12 +93,9 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
                     ${item.id === 'close' || item.id === 'back' ? 'border-red-500/50 text-red-500 hover:border-red-500' : 'text-cyan'}
                   `}
                 >
-                  <i className={`${item.icon} text-2xl`}></i>
+                  <i className={`fas ${item.icon} text-2xl`}></i>
                   <span className="font-orbitron text-[8px] tracking-wider mt-1">{item.label}</span>
-                  <div 
-                    className="absolute top-1/2 left-1/2 w-[160px] h-[1px] bg-cyan/20 -z-10 origin-left pointer-events-none"
-                    style={{ transform: `rotate(${item.angle + 180}deg)`, width: `${radius}px`, left: '50%', top: '50%' }}
-                  />
+                  <div className="absolute top-1/2 left-1/2 w-[160px] h-[1px] bg-cyan/20 -z-10 origin-left pointer-events-none" style={{ transform: `rotate(${item.angle + 180}deg)`, width: `${radius}px`, left: '50%', top: '50%' }} />
                 </motion.button>
               );
             })}

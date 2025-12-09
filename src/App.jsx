@@ -8,14 +8,12 @@ import CommandMenu from './components/CommandMenu';
 import VisionModule from './components/VisionModule';
 import MediaPanel from './components/MediaPanel';
 import DatabasePanel from './components/DatabasePanel';
-import HUDModule from './components/HUDModule'; // <--- NEW IMPORT
+import HUDModule from './components/HUDModule';
+import OpsPanel from './components/OpsPanel'; // <--- NEW
+import ReconPanel from './components/ReconPanel'; // <--- NEW
 
 const JarvisInterface = () => {
-  const { 
-    systemStatus, setSystemStatus, playSound, speak, 
-    user, battery, isListening, toggleListening, activeMode 
-  } = useJarvis();
-
+  const { systemStatus, setSystemStatus, playSound, speak, user, battery, isListening, toggleListening, activeMode } = useJarvis();
   const [started, setStarted] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -91,7 +89,9 @@ const JarvisInterface = () => {
       {activeMode === 'VISION' && <VisionModule />}
       {activeMode === 'MEDIA' && <MediaPanel />}
       {activeMode === 'DATABASE' && <DatabasePanel />}
-      {activeMode === 'HUD' && <HUDModule />} {/* <--- NEW HUD */}
+      {activeMode === 'HUD' && <HUDModule />}
+      {activeMode === 'OPS' && <OpsPanel />}   {/* <--- OPS */}
+      {activeMode === 'RECON' && <ReconPanel />} {/* <--- RECON */}
 
     </div>
   );
