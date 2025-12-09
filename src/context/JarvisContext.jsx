@@ -4,6 +4,7 @@ const JarvisContext = createContext();
 
 export const JarvisProvider = ({ children }) => {
   // --- CORE STATE ---
+  // isListening = The VISUAL state (Is the mic button red?)
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [systemStatus, setSystemStatus] = useState("STANDBY"); 
@@ -71,8 +72,9 @@ export const JarvisProvider = ({ children }) => {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     
-    // On mobile, stopping recognition before speaking helps prevent echo
-    if (isListening && recognitionRef.current) {
+    // Stop listening temporarily so he doesn't hear himself
+    // BUT do not change isListening visual state
+    if (recognitionRef.current) {
        try { recognitionRef.current.stop(); } catch(e){}
     }
 
@@ -85,13 +87,13 @@ export const JarvisProvider = ({ children }) => {
       setIsSpeaking(false);
       // If Sentinel Mode is active OR shouldListenAfter is true, restart mic
       if (sentinelMode.current || shouldListenAfter) {
-          setTimeout(() => startListening(), 500); // 500ms pause before restarting
+          setTimeout(() => startListening(), 200); 
       }
     };
     window.speechSynthesis.speak(u);
   };
 
-  // --- VOICE RECOGNITION (STABILIZED) ---
+  // --- VOICE RECOGNITION (NO FLICKER VERSION) ---
   const recognitionRef = useRef(null);
   const [conversationState, setConversationState] = useState("IDLE");
   const [tempPersonData, setTempPersonData] = useState({});
@@ -100,23 +102,27 @@ export const JarvisProvider = ({ children }) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SR) {
       const recon = new SR();
-      recon.continuous = false; 
+      recon.continuous = false; // Mobile friendly
       recon.interimResults = false;
       recon.lang = 'en-US';
 
-      recon.onstart = () => { setIsListening(true); };
+      recon.onstart = () => {
+          // Hardware started
+      };
       
       recon.onend = () => {
-          // If Sentinel Mode is ON, we restart.
+          // CRITICAL FIX: If we want to be listening, DO NOT set state to false.
+          // Just silently restart.
           if (sentinelMode.current && !isSpeaking) {
-              // Increase delay to 500ms to allow mobile audio driver to reset
               setTimeout(() => {
                   try { recon.start(); } catch (e) {
-                      setTimeout(() => { if(sentinelMode.current) try{ recon.start(); } catch(e){} }, 500);
+                      // Retry if fail
+                      setTimeout(() => { if(sentinelMode.current) try{ recon.start(); } catch(e){} }, 200);
                   }
-              }, 500);
+              }, 200);
           } else {
-              setIsListening(false);
+              // Only turn off the visual UI if we REALLY stopped (user clicked stop)
+              if (!sentinelMode.current) setIsListening(false);
           }
       };
       
@@ -137,13 +143,16 @@ export const JarvisProvider = ({ children }) => {
 
   const toggleListening = () => {
     if (isListening) {
-        sentinelMode.current = false;
-        setIsListening(false);
-        if(recognitionRef.current) recognitionRef.current.stop();
+        // STOPPING
+        sentinelMode.current = false; // Flag OFF
+        setIsListening(false); // Visual OFF
+        if(recognitionRef.current) recognitionRef.current.stop(); // Hardware OFF
         speak("Listening paused.");
     } else {
-        sentinelMode.current = true;
-        startListening();
+        // STARTING
+        sentinelMode.current = true; // Flag ON
+        setIsListening(true); // Visual ON immediately
+        startListening(); // Hardware ON
         playSound('startup');
     }
   };
@@ -203,7 +212,6 @@ export const JarvisProvider = ({ children }) => {
   };
 
   const handleConversationResponse = (response) => {
-     // (Same interview logic as before)
      const newData = { ...tempPersonData };
      if (conversationState === "ASK_NAME") {
         newData.name = response.replace(/\./g, '');
