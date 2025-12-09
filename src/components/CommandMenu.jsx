@@ -8,46 +8,54 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
 
   const radius = 160;
 
-  // --- MENU ITEMS ---
-  const mainTop = [
-    { id: 'media', label: 'MEDIA', icon: 'fa-music', angle: 90, action: () => { setActiveMode('MEDIA'); speak("Media player ready."); } }
-  ];
-
-const mainLeft = [
-    { id: 'vision', label: 'VISION', icon: 'fa-eye', angle: 140, action: () => { setActiveMode('VISION'); speak("Vision systems active."); } },
-    { id: 'guardian', label: 'GUARDIAN', icon: 'fa-shield-alt', angle: 180, action: () => { setActiveMode('GUARDIAN'); speak("Connecting to T-Force Guardian network."); } }, // <--- NEW
-    { id: 'comms', label: 'COMMS', icon: 'fa-comments', angle: 220, action: () => { setSubMenu('COMMS'); speak("Select communication channel."); } }
-  ];
-  // Note: I shifted angles or you can just add it. The HUD can move to top-left or bottom.
-  // Actually, to fit 4 items on left might be tight. Let's move HUD to the "Crown" (Top) with Media?
-  // OR just replace 'COMMS' in the main ring with 'GUARDIAN', and put 'COMMS' inside the Guardian panel?
-  // Let's stick to adding it to the ring for now.
-
-  // Right Side: Database, Ops, Recon
-  const mainRight = [
-    { id: 'ops', label: 'OPS LOG', icon: 'fa-file-medical-alt', angle: 40, action: () => { setActiveMode('OPS'); speak("Operations center online."); } },
+  // --- MAIN MENU ITEMS (8-Point Compass) ---
+  const mainItems = [
+    // 12 o'clock (Top)
+    { id: 'hud', label: 'DRIVE', icon: 'fa-car', angle: -90, action: () => { setActiveMode('HUD'); speak("Driving protocols initiated."); } },
+    
+    // 1-2 o'clock (Top Right)
+    { id: 'database', label: 'DATABASE', icon: 'fa-database', angle: -45, action: () => { setActiveMode('DATABASE'); speak("Accessing personnel records."); } },
+    
+    // 3 o'clock (Right)
     { id: 'recon', label: 'RECON', icon: 'fa-search-location', angle: 0, action: () => { setActiveMode('RECON'); speak("Sales targeting engaged."); } },
-    { id: 'database', label: 'DATABASE', icon: 'fa-database', angle: -40, action: () => { setActiveMode('DATABASE'); speak("Accessing personnel records."); } }
+    
+    // 4-5 o'clock (Bottom Right)
+    { id: 'ops', label: 'OPS LOG', icon: 'fa-file-medical-alt', angle: 45, action: () => { setActiveMode('OPS'); speak("Operations center online."); } },
+    
+    // 6 o'clock (Bottom)
+    { id: 'media', label: 'MEDIA', icon: 'fa-music', angle: 90, action: () => { setActiveMode('MEDIA'); speak("Media player ready."); } },
+    
+    // 7-8 o'clock (Bottom Left)
+    { id: 'vision', label: 'VISION', icon: 'fa-eye', angle: 135, action: () => { setActiveMode('VISION'); speak("Vision systems active."); } },
+    
+    // 9 o'clock (Left)
+    { id: 'guardian', label: 'GUARDIAN', icon: 'fa-shield-alt', angle: 180, action: () => { setActiveMode('GUARDIAN'); } },
+    
+    // 10-11 o'clock (Top Left)
+    { id: 'comms', label: 'COMMS', icon: 'fa-comments', angle: 225, action: () => { setSubMenu('COMMS'); speak("Comms open."); } }
   ];
 
-  // Note: Settings is now accessed via top-right gear only, to make room in the ring.
-
+  // --- COMMS SUB-MENU ---
   const commsItems = [
-    { id: 'whatsapp', label: 'WHATSAPP', icon: 'fab fa-whatsapp', angle: 220, url: 'https://wa.me/' },
+    { id: 'whatsapp', label: 'WHATSAPP', icon: 'fab fa-whatsapp', angle: 225, url: 'https://wa.me/' },
     { id: 'messenger', label: 'MESSENGER', icon: 'fab fa-facebook-messenger', angle: 180, url: 'https://m.me/' },
-    { id: 'viber', label: 'VIBER', icon: 'fab fa-viber', angle: 140, url: 'viber://forward?text=Status%20Check' },
+    { id: 'viber', label: 'VIBER', icon: 'fab fa-viber', angle: 135, url: 'viber://forward?text=Status%20Check' },
     { id: 'facebook', label: 'FACEBOOK', icon: 'fab fa-facebook-f', angle: 90, url: 'https://facebook.com/' },
-    { id: 'instagram', label: 'INSTAGRAM', icon: 'fab fa-instagram', angle: 40, url: 'https://instagram.com/' },
+    { id: 'instagram', label: 'INSTAGRAM', icon: 'fab fa-instagram', angle: 45, url: 'https://instagram.com/' },
     { id: 'x', label: 'X', icon: 'fab fa-x-twitter', angle: 0, url: 'https://x.com/' },
-    { id: 'youtube', label: 'YOUTUBE', icon: 'fab fa-youtube', angle: -40, url: 'https://youtube.com/' },
+    { id: 'youtube', label: 'YOUTUBE', icon: 'fab fa-youtube', angle: -45, url: 'https://youtube.com/' },
     { id: 'back', label: 'BACK', icon: 'fa-undo', angle: -90, action: () => setSubMenu(null) }
   ];
 
-  const currentItems = subMenu === 'COMMS' ? commsItems : [...mainTop, ...mainLeft, ...mainRight];
+  const currentItems = subMenu === 'COMMS' ? commsItems : mainItems;
 
   const getPosition = (angle) => {
+    // Convert degrees to radians
     const radian = (angle * Math.PI) / 180;
-    return { x: Math.cos(radian) * radius, y: Math.sin(radian) * radius * 0.8 };
+    return { 
+      x: Math.cos(radian) * radius, 
+      y: Math.sin(radian) * radius * 0.8 // 0.8 squashes height slightly for 3D effect
+    };
   };
 
   const handleAction = (item) => {
@@ -77,7 +85,9 @@ const mainLeft = [
           onClick={() => { onClose(); setSubMenu(null); }}
         >
           <div className="relative w-0 h-0 flex items-center justify-center" onClick={e => e.stopPropagation()}>
+            {/* Center Close Trigger */}
             <div className="absolute w-32 h-32 rounded-full cursor-pointer" onClick={() => { onClose(); setSubMenu(null); }} />
+
             {currentItems.map((item, index) => {
               const pos = getPosition(item.angle);
               return (
@@ -94,7 +104,7 @@ const mainLeft = [
                     shadow-[0_0_15px_rgba(0,229,255,0.2)]
                     hover:scale-110 hover:border-cyan hover:bg-cyan/20 hover:shadow-[0_0_25px_rgba(0,229,255,0.6)]
                     active:scale-95 transition-all
-                    ${item.id === 'close' || item.id === 'back' ? 'border-red-500/50 text-red-500 hover:border-red-500' : 'text-cyan'}
+                    ${item.id === 'back' ? 'border-red-500/50 text-red-500 hover:border-red-500' : 'text-cyan'}
                   `}
                 >
                   <i className={`fas ${item.icon} text-2xl`}></i>
