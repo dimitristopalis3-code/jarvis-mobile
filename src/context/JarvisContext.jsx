@@ -12,9 +12,6 @@ export const JarvisProvider = ({ children }) => {
   const [user] = useState({ name: "Jim", access: "Admin" });
   const [battery, setBattery] = useState(100);
   
-  // --- SENTINEL MODE ---
-  const sentinelMode = useRef(false);
-
   // --- VOICE & SENSORS ---
   const [availableVoices, setAvailableVoices] = useState([]);
   const [selectedVoiceIndex, setSelectedVoiceIndex] = useState(0);
@@ -67,13 +64,14 @@ export const JarvisProvider = ({ children }) => {
 
   const changeVoice = (i) => { setSelectedVoiceIndex(i); localStorage.setItem('jarvis_voice_index', i); };
 
-  const speak = (text, shouldListenAfter = false) => {
+  const speak = (text) => {
     if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     
-    // We intentionally DO NOT stop the recognition engine here anymore.
-    // Stopping it causes the "Blip" sound when we restart it.
-    // Instead, we just let it run. If it picks up the robot voice, so be it (it usually filters echo).
+    // Stop listening before speaking to prevent echo
+    if (recognitionRef.current) {
+       try { recognitionRef.current.stop(); } catch(e){}
+    }
 
     setIsSpeaking(true);
     const u = new SpeechSynthesisUtterance(text);
@@ -82,15 +80,12 @@ export const JarvisProvider = ({ children }) => {
     
     u.onend = () => {
       setIsSpeaking(false);
-      // If Sentinel Mode is active OR shouldListenAfter is true, ensure we are listening
-      if (sentinelMode.current || shouldListenAfter) {
-          if (!isListening) startListening();
-      }
+      // NO AUTO RESTART. We stay silent until user taps again.
     };
     window.speechSynthesis.speak(u);
   };
 
-  // --- VOICE RECOGNITION (CONTINUOUS MODE) ---
+  // --- VOICE RECOGNITION (MANUAL MODE) ---
   const recognitionRef = useRef(null);
   const [conversationState, setConversationState] = useState("IDLE");
   const [tempPersonData, setTempPersonData] = useState({});
@@ -99,32 +94,19 @@ export const JarvisProvider = ({ children }) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SR) {
       const recon = new SR();
-      
-      // CRITICAL FIX: Set to TRUE to prevent constant start/stop blipping
-      recon.continuous = true; 
+      recon.continuous = false; // Single command only
       recon.interimResults = false;
       recon.lang = 'en-US';
 
       recon.onstart = () => { setIsListening(true); };
       
       recon.onend = () => {
-          // If the OS kills the mic (timeout), restart it gently
-          if (sentinelMode.current) {
-              setTimeout(() => {
-                  try { recon.start(); } catch (e) {
-                      // Retry
-                      setTimeout(() => { if(sentinelMode.current) try{ recon.start(); } catch(e){} }, 500);
-                  }
-              }, 500);
-          } else {
-              setIsListening(false);
-          }
+          // Simply stop. No loops. No restarts.
+          setIsListening(false);
       };
       
       recon.onresult = (event) => {
-        // In continuous mode, results stack up. We take the latest one.
-        const lastIdx = event.results.length - 1;
-        const transcript = event.results[lastIdx][0].transcript.toLowerCase().trim();
+        const transcript = event.results[0][0].transcript.toLowerCase().trim();
         processCommand(transcript);
       };
       
@@ -133,20 +115,18 @@ export const JarvisProvider = ({ children }) => {
   }, [conversationState, activeMode]); 
 
   const startListening = () => {
-    if (recognitionRef.current) {
+    if (recognitionRef.current && !isSpeaking) {
         try { recognitionRef.current.start(); } catch (e) {}
     }
   };
 
   const toggleListening = () => {
     if (isListening) {
-        sentinelMode.current = false;
-        setIsListening(false);
+        // Manual Stop
         if(recognitionRef.current) recognitionRef.current.stop();
-        speak("Listening paused.");
+        speak("Cancelled.");
     } else {
-        sentinelMode.current = true;
-        setIsListening(true);
+        // Manual Start
         startListening();
         playSound('startup');
     }
@@ -154,9 +134,6 @@ export const JarvisProvider = ({ children }) => {
 
   // --- COMMAND PROCESSOR ---
   const processCommand = (cmd) => {
-    // Basic echo cancellation: Ignore commands if Jarvis is currently speaking
-    if (isSpeaking) return;
-
     setLastCommand({ text: cmd, time: Date.now() });
 
     if (conversationState !== "IDLE") {
@@ -166,7 +143,7 @@ export const JarvisProvider = ({ children }) => {
 
     if (cmd === "jarvis" || cmd === "hey jarvis" || cmd === "hello") {
         setActiveMode("MENU_OPEN");
-        speak("Sir?", true);
+        speak("Sir?");
         return;
     }
 
@@ -193,7 +170,7 @@ export const JarvisProvider = ({ children }) => {
     else if (cmd.includes("close") || cmd.includes("exit") || cmd.includes("stop")) {
         if (activeMode !== "HOME") {
             setActiveMode("MENU_OPEN");
-            speak("Module closed. Anything else?", true);
+            speak("Module closed. Anything else?");
         } else {
             setActiveMode("HOME");
             speak("Standing by.");
@@ -201,7 +178,9 @@ export const JarvisProvider = ({ children }) => {
     }
     
     else if (cmd.includes("yes") && activeMode === "MENU_OPEN") {
-        speak("Awaiting command.", true);
+        speak("Awaiting command.");
+        // Optional: We could trigger listening here manually if we really wanted to, 
+        // but for safety, we let the user tap.
     }
     else if (cmd.includes("no") && activeMode === "MENU_OPEN") {
         setActiveMode("HOME");
@@ -210,18 +189,23 @@ export const JarvisProvider = ({ children }) => {
   };
 
   const handleConversationResponse = (response) => {
+     // ... (Existing interview logic - same as before) ...
      const newData = { ...tempPersonData };
      if (conversationState === "ASK_NAME") {
         newData.name = response.replace(/\./g, '');
-        setTempPersonData(newData); setConversationState("ASK_GENDER"); speak(`Registered ${newData.name}. Male or Female?`, true);
+        setTempPersonData(newData); setConversationState("ASK_GENDER"); 
+        speak(`Registered ${newData.name}. Male or Female?`); 
+        // Here we MIGHT want to auto-listen because it's a conversation flow, 
+        // but let's keep it manual for stability first.
+        // User taps -> says "Male" -> Jarvis processes.
      } 
      else if (conversationState === "ASK_GENDER") {
         newData.gender = response.includes("female") ? "Female" : "Male";
-        setTempPersonData(newData); setConversationState("ASK_AGE"); speak("Age?", true);
+        setTempPersonData(newData); setConversationState("ASK_AGE"); speak("Age?");
      } 
      else if (conversationState === "ASK_AGE") {
         newData.age = response.replace(/\D/g,'') || "Unknown";
-        setTempPersonData(newData); setConversationState("ASK_ACCESS"); speak("Access Level?", true);
+        setTempPersonData(newData); setConversationState("ASK_ACCESS"); speak("Access Level?");
      } 
      else if (conversationState === "ASK_ACCESS") {
         let level = "No Access";
@@ -239,7 +223,7 @@ export const JarvisProvider = ({ children }) => {
     if (conversationState === "SCANNING") {
         setTempPersonData({ descriptor: faceDescriptor });
         setConversationState("ASK_NAME");
-        speak("Target captured. Who is this person?", true);
+        speak("Target captured. Who is this person?");
     }
   };
 
