@@ -9,11 +9,16 @@ import VisionModule from './components/VisionModule';
 import MediaPanel from './components/MediaPanel';
 import DatabasePanel from './components/DatabasePanel';
 import HUDModule from './components/HUDModule';
-import OpsPanel from './components/OpsPanel'; // <--- NEW
-import ReconPanel from './components/ReconPanel'; // <--- NEW
+import OpsPanel from './components/OpsPanel';
+import ReconPanel from './components/ReconPanel';
+import GuardianPanel from './components/GuardianPanel'; // <--- NEW IMPORT
 
 const JarvisInterface = () => {
-  const { systemStatus, setSystemStatus, playSound, speak, user, battery, isListening, toggleListening, activeMode } = useJarvis();
+  const { 
+    systemStatus, setSystemStatus, playSound, speak, 
+    user, battery, isListening, toggleListening, activeMode 
+  } = useJarvis();
+
   const [started, setStarted] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -27,33 +32,47 @@ const JarvisInterface = () => {
     }, 1000);
   };
 
+  // --- SCREEN 1: STARTUP (Fingerprint) ---
   if (!started) {
     return (
-      <div onClick={handleStart} className="w-screen h-screen bg-black flex flex-col items-center justify-center cursor-pointer select-none">
-        <div className="text-cyan text-6xl animate-pulse mb-4"><i className="fas fa-fingerprint"></i></div>
+      <div 
+        onClick={handleStart}
+        className="w-screen h-screen bg-black flex flex-col items-center justify-center cursor-pointer select-none"
+      >
+        <div className="text-cyan text-6xl animate-pulse mb-4">
+          <i className="fas fa-fingerprint"></i>
+        </div>
         <div className="text-cyan font-orbitron font-bold text-xl tracking-widest">INITIALIZE JARVIS</div>
         <div className="text-cyan-dim font-mono text-xs mt-2">TOUCH TO AUTHENTICATE</div>
       </div>
     );
   }
 
+  // --- SCREEN 2: MAIN INTERFACE ---
   return (
     <div className="relative w-screen h-screen bg-black overflow-hidden">
+      
+      {/* 1. Background Layer: The Reactor */}
       <ReactorCanvas />
       
+      {/* 2. TRIGGER AREA: Tap Center to Open Menu (Only in HOME mode) */}
       {activeMode === 'HOME' && (
         <div 
           onClick={() => { playSound('click'); setShowMenu(true); }}
           className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full z-10 cursor-pointer"
+          title="Access Main Menu"
         ></div>
       )}
 
+      {/* 3. UI Layer: Top HUD */}
       <div className="absolute top-0 left-0 w-full p-4 flex justify-between items-start z-20 pointer-events-none">
+        {/* Identity Block */}
         <div className="text-cyan-dim font-mono text-xs">
            <div className="border-b border-cyan w-20 mb-1">T-FORCE</div>
            <div>OP: {user.name.toUpperCase()}</div>
            <div>ACC: {user.access.toUpperCase()}</div>
         </div>
+        {/* Power Block */}
         <div className="text-right">
            <div className={`text-xl font-orbitron font-bold ${battery < 20 ? 'text-red-500' : 'text-cyan'}`}>
              {battery}%
@@ -62,41 +81,63 @@ const JarvisInterface = () => {
         </div>
       </div>
 
+      {/* 4. MICROPHONE BUTTON (Bottom Center) - Only show in HOME mode */}
       {activeMode === 'HOME' && (
         <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-20">
           <button 
             onClick={toggleListening}
-            className={`w-16 h-16 rounded-full border border-cyan flex items-center justify-center transition-all duration-300 backdrop-blur-sm ${isListening ? 'bg-red-500/20 shadow-[0_0_30px_rgba(255,0,0,0.5)] border-red-500 scale-110' : 'bg-black/50 hover:bg-cyan/20 shadow-[0_0_15px_rgba(0,229,255,0.3)]'}`}
+            className={`
+              w-16 h-16 rounded-full border border-cyan flex items-center justify-center
+              transition-all duration-300 backdrop-blur-sm
+              ${isListening 
+                ? 'bg-red-500/20 shadow-[0_0_30px_rgba(255,0,0,0.5)] border-red-500 scale-110' 
+                : 'bg-black/50 hover:bg-cyan/20 shadow-[0_0_15px_rgba(0,229,255,0.3)]'}
+            `}
           >
             <i className={`fas fa-microphone text-2xl ${isListening ? 'text-red-500 animate-pulse' : 'text-cyan'}`}></i>
           </button>
         </div>
       )}
 
+      {/* 5. UI Layer: Bottom Status Text */}
       <div className="absolute bottom-8 w-full text-center z-20 pointer-events-none">
-         <div className="text-cyan font-orbitron tracking-[4px] text-sm animate-pulse">{systemStatus}</div>
-         <div className="text-cyan-dim text-[10px] mt-1 font-mono">{activeMode === 'HOME' ? (isListening ? "LISTENING..." : "AWAITING COMMAND") : activeMode}</div>
+         <div className="text-cyan font-orbitron tracking-[4px] text-sm animate-pulse">
+           {systemStatus}
+         </div>
+         <div className="text-cyan-dim text-[10px] mt-1 font-mono">
+            {activeMode === 'HOME' 
+              ? (isListening ? "LISTENING..." : "AWAITING COMMAND") 
+              : activeMode}
+         </div>
       </div>
 
+      {/* --- OVERLAYS & MODALS --- */}
+
+      {/* Command Menu (The Arc Menu) */}
       <CommandMenu 
         isOpen={showMenu} 
         onClose={() => setShowMenu(false)} 
         onOpenSettings={() => { setShowMenu(false); setShowSettings(true); }}
       />
+      
+      {/* Settings Panel (Voice Config) */}
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
-      {/* MODULES */}
+      {/* --- FULL SCREEN MODULES --- */}
+
       {activeMode === 'VISION' && <VisionModule />}
       {activeMode === 'MEDIA' && <MediaPanel />}
       {activeMode === 'DATABASE' && <DatabasePanel />}
       {activeMode === 'HUD' && <HUDModule />}
-      {activeMode === 'OPS' && <OpsPanel />}   {/* <--- OPS */}
-      {activeMode === 'RECON' && <ReconPanel />} {/* <--- RECON */}
+      {activeMode === 'OPS' && <OpsPanel />}
+      {activeMode === 'RECON' && <ReconPanel />}
+      {activeMode === 'GUARDIAN' && <GuardianPanel />} {/* <--- The New Line */}
 
     </div>
   );
 };
 
+// Main App Wrapper
 function App() {
   return (
     <JarvisProvider>

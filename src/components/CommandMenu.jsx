@@ -13,11 +13,15 @@ const CommandMenu = ({ isOpen, onClose, onOpenSettings }) => {
     { id: 'media', label: 'MEDIA', icon: 'fa-music', angle: 90, action: () => { setActiveMode('MEDIA'); speak("Media player ready."); } }
   ];
 
-  const mainLeft = [
+const mainLeft = [
     { id: 'vision', label: 'VISION', icon: 'fa-eye', angle: 140, action: () => { setActiveMode('VISION'); speak("Vision systems active."); } },
-    { id: 'comms', label: 'COMMS', icon: 'fa-comments', angle: 180, action: () => { setSubMenu('COMMS'); speak("Select communication channel."); } },
-    { id: 'hud', label: 'DRIVE', icon: 'fa-car', angle: 220, action: () => { setActiveMode('HUD'); speak("Driving protocols initiated."); } }
+    { id: 'guardian', label: 'GUARDIAN', icon: 'fa-shield-alt', angle: 180, action: () => { setActiveMode('GUARDIAN'); speak("Connecting to T-Force Guardian network."); } }, // <--- NEW
+    { id: 'comms', label: 'COMMS', icon: 'fa-comments', angle: 220, action: () => { setSubMenu('COMMS'); speak("Select communication channel."); } }
   ];
+  // Note: I shifted angles or you can just add it. The HUD can move to top-left or bottom.
+  // Actually, to fit 4 items on left might be tight. Let's move HUD to the "Crown" (Top) with Media?
+  // OR just replace 'COMMS' in the main ring with 'GUARDIAN', and put 'COMMS' inside the Guardian panel?
+  // Let's stick to adding it to the ring for now.
 
   // Right Side: Database, Ops, Recon
   const mainRight = [
