@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useJarvis } from '../context/JarvisContext';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -34,21 +34,25 @@ const GuardianPanel = () => {
   const [pass, setPass] = useState('');
   const [error, setError] = useState('');
 
-  // 1. AUTH LISTENER (With Audio Fix)
+  // REF TO PREVENT STUTTERING
+  const hasSpoken = useRef(false);
+
+  // 1. AUTH LISTENER
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
         setUser(u);
         setLoading(false);
         
-        // FIX: Add a delay so the UI renders first, preventing audio stutter
-        if(u) {
+        // THE FIX: Check if we already spoke. If not, speak and flip the flag.
+        if (u && !hasSpoken.current) {
+            hasSpoken.current = true; // Lock it immediately
             setTimeout(() => {
                 speak("Guardian uplink established.");
-            }, 800); // 800ms delay to let the heavy data load first
+            }, 500); 
         }
     });
     return () => unsub();
-  }, [speak]); // Removed 'speak' from dependency if it causes loops, but 'speak' is stable in context.
+  }, []); // Removed [speak] dependency entirely to prevent loop
 
   // 2. LIVE FEED LISTENER
   useEffect(() => {
@@ -93,6 +97,7 @@ const GuardianPanel = () => {
   const handleLogout = () => {
     signOut(auth);
     playSound('click');
+    hasSpoken.current = false; // Reset so he speaks again next time we login
   };
 
   const fmtDate = (ts) => {
@@ -176,7 +181,7 @@ const GuardianPanel = () => {
                                 <div className="bg-black p-2 mt-3 font-mono text-xs text-red-400 border border-white/10 flex justify-between items-center">
                                     <span>{u.latitude?.toFixed(4)}, {u.longitude?.toFixed(4)}</span>
                                     <a 
-                                        href={`http://googleusercontent.com/maps.google.com/5{u.latitude},${u.longitude}`} 
+                                        href={`http://googleusercontent.com/maps.google.com/6{u.latitude},${u.longitude}`} 
                                         target="_blank" 
                                         rel="noreferrer"
                                         className="text-white hover:text-red-500"
