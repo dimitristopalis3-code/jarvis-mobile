@@ -1,202 +1,181 @@
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import { useJarvis } from '../context/JarvisContext';
 
 const ReactorCanvas = () => {
-  const canvasRef = useRef(null);
-  // Grab state to influence pulse/speed if desired later, though not strictly needed for the rotation pattern
-  const { isSpeaking, isListening, activeMode } = useJarvis();
+  const { isListening, isSpeaking } = useJarvis();
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    let animationFrameId;
-    let time = 0;
+  // --- STYLING LOGIC ---
 
-    // T-Force Color Palette based on reference image
-    const colors = {
-      cyan: '#00E5FF',
-      cyanBright: '#E0FFFF',
-      cyanDim: 'rgba(0, 229, 255, 0.2)',
-      white: '#FFFFFF',
-      orange: '#FF8C00', // A slightly deeper, glowing orange
-      alert: '#FF0000'
+  const getCoreGlow = () => {
+    if (isListening) return 'bg-cyan/20 shadow-[0_0_50px_rgba(0,229,255,0.9)] animate-pulse-fast';
+    if (isSpeaking) return 'bg-emerald-300/20 shadow-[0_0_60px_rgba(167,243,208,0.7)] animate-pulse-fast';
+    return 'bg-cyan/5 shadow-[0_0_30px_rgba(0,229,255,0.4)]';
+  };
+
+  const getTextColor = () => {
+    if (isListening) return 'text-cyan drop-shadow-[0_0_15px_rgba(0,229,255,1)] animate-pulse';
+    if (isSpeaking) return 'text-emerald-300 drop-shadow-[0_0_15px_rgba(167,243,208,1)]';
+    return 'text-cyan drop-shadow-[0_0_8px_rgba(0,229,255,0.8)]';
+  };
+
+  const getDynamicAccentStyle = () => {
+    const targetAngle = isSpeaking ? 120 : 45;
+    const colorStart = isSpeaking ? 'rgba(250, 204, 21, 1)' : 'rgba(250, 204, 21, 0.8)';
+    const colorEnd = isSpeaking ? 'rgba(251, 146, 60, 0.8)' : 'rgba(250, 204, 21, 0.2)';
+
+    return {
+        background: `conic-gradient(from 0deg, ${colorStart} 0deg, ${colorEnd} ${targetAngle}deg, transparent ${targetAngle}deg)`,
+        maskImage: 'radial-gradient(closest-side, transparent 85%, white 86%)',
+        WebkitMaskImage: 'radial-gradient(closest-side, transparent 85%, white 86%)',
+        transition: 'all 0.2s ease-in-out',
+        position: 'absolute',
+        inset: 0,
+        borderRadius: '9999px',
+        transform: 'rotate(-20deg)',
     };
+  };
 
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    window.addEventListener('resize', resize);
-    resize();
+  const compassMaskStyle = {
+      maskImage: `conic-gradient(
+          black 0deg 30deg,
+          transparent 30deg 60deg,
+          black 60deg 120deg,
+          transparent 120deg 150deg,
+          black 150deg 210deg,
+          transparent 210deg 240deg,
+          black 240deg 300deg,
+          transparent 300deg 330deg,
+          black 330deg 360deg
+      )`,
+      WebkitMaskImage: `conic-gradient(
+          black 0deg 30deg,
+          transparent 30deg 60deg,
+          black 60deg 120deg,
+          transparent 120deg 150deg,
+          black 150deg 210deg,
+          transparent 210deg 240deg,
+          black 240deg 300deg,
+          transparent 300deg 330deg,
+          black 330deg 360deg
+      )`,
+  };
 
-    // Helper to draw rings easily
-    const drawRing = (radius, width, color, glow = 0, dash = []) => {
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = width;
-        ctx.shadowBlur = glow;
-        ctx.shadowColor = color;
-        ctx.setLineDash(dash);
-        ctx.stroke();
-        ctx.setLineDash([]); // Reset dash
-    };
+  return (
+    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] sm:w-[380px] sm:h-[380px] flex items-center justify-center z-0 pointer-events-none">
 
-    const draw = () => {
-      time++;
-      const width = canvas.width;
-      const height = canvas.height;
-      const centerX = width / 2;
-      const centerY = height / 2;
-      // Base scale
-      const s = Math.min(width, height) * (width < 768 ? 0.35 : 0.25); 
-      
-      ctx.clearRect(0, 0, width, height);
-      ctx.translate(centerX, centerY);
+        {/* --- LAYER 1: OUTER SCALE (USER CUSTOMIZED) --- */}
+        <div className="absolute inset-[-40px] rounded-full animate-spin-slow" style={{ animationDuration: '40s' }}>
+            <div className="absolute inset-0 rounded-full"
+                 style={{
+                     // Same 1deg tick / 5deg gap pattern as inner gear
+                     background: 'repeating-conic-gradient(transparent 0deg 5deg, #00e5ff 5deg 6deg)',
+                     // Custom mask settings provided by user
+                     maskImage: 'radial-gradient(transparent 60%, black 60%)',
+                     WebkitMaskImage: 'radial-gradient(transparent 60%, black 93%)'
+                 }}>
+            </div>
+        </div>
 
-      const baseSpeed = 0.0015;
-      const t = time * baseSpeed;
+        {/* --- LAYER 2 GROUP: THE TRACK SYSTEM --- */}
+        <div className="absolute inset-[-2px] rounded-full border border-cyan/30 opacity-60"></div> {/* Outer Rail */}
+        <div className="absolute inset-[23px] rounded-full border border-cyan/30 opacity-60"></div> {/* Inner Rail */}
 
-      // Define main color based on mode
-      const mainColor = activeMode === 'WARNING' ? colors.alert : colors.cyan;
-      const accentColor = activeMode === 'WARNING' ? colors.alert : colors.white;
+        <div className="absolute inset-[-2px] rounded-full animate-spin-slow" style={{ animationDuration: '30s' }}>
+            
+            {/* A. Yellow Voice Arc (Thickened) */}
+            <div className="absolute inset-0" style={getDynamicAccentStyle()}></div>
 
-      // --- LAYER 1 (OUTERMOST): Ticks ---
-      // Rotation: Clockwise
-      ctx.save();
-      ctx.rotate(t);
-      for (let i = 0; i < 72; i++) { // More ticks for detailed look
-        ctx.rotate((Math.PI * 2) / 72);
-        ctx.beginPath();
-        // Alternating tick lengths for detail
-        const tickLen = i % 4 === 0 ? 1.15 : 1.1;
-        ctx.moveTo(s * 1.05, 0);
-        ctx.lineTo(s * tickLen, 0);
-        ctx.strokeStyle = mainColor;
-        ctx.lineWidth = i % 4 === 0 ? 3 : 1.5;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = mainColor;
-        ctx.stroke();
-      }
-      ctx.restore();
+            {/* B. Opposite Segment Array (Thickened to 20px) */}
+            
+            {/* 3 Solid Blocks */}
+            <div className="absolute inset-0 rotate-[150deg]"><div className="absolute top-[2px] left-1/2 -translate-x-1/2 w-[30px] h-[20px] bg-cyan shadow-[0_0_8px_rgba(0,229,255,0.8)] skew-x-12"></div></div>
+            <div className="absolute inset-0 rotate-[164deg]"><div className="absolute top-[2px] left-1/2 -translate-x-1/2 w-[30px] h-[20px] bg-cyan shadow-[0_0_8px_rgba(0,229,255,0.8)] skew-x-12"></div></div>
+            <div className="absolute inset-0 rotate-[178deg]"><div className="absolute top-[2px] left-1/2 -translate-x-1/2 w-[30px] h-[20px] bg-cyan shadow-[0_0_8px_rgba(0,229,255,0.8)] skew-x-12"></div></div>
 
-      // --- LAYER 2: Thick Segmented Ring ---
-      // Rotation: Counter-Clockwise
-      ctx.save();
-      ctx.rotate(-t * 1.2);
-      // Dashed pattern: long dash, gap, short dash, gap
-      drawRing(s * 0.95, s * 0.08, colors.cyanDim, 5, [s*0.2, s*0.05, s*0.05, s*0.05]);
-      // Add bright overlay segments
-      ctx.rotate(Math.PI / 3);
-      drawRing(s * 0.95, s * 0.02, mainColor, 15, [s*0.3, s*1.5]);
-      ctx.restore();
+            {/* 3 Outline Blocks */}
+            <div className="absolute inset-0 rotate-[195deg]"><div className="absolute top-[2px] left-1/2 -translate-x-1/2 w-[30px] h-[20px] border border-cyan shadow-[0_0_5px_rgba(0,229,255,0.5)] skew-x-12"></div></div>
+            <div className="absolute inset-0 rotate-[209deg]"><div className="absolute top-[2px] left-1/2 -translate-x-1/2 w-[30px] h-[20px] border border-cyan shadow-[0_0_5px_rgba(0,229,255,0.5)] skew-x-12"></div></div>
+            <div className="absolute inset-0 rotate-[223deg]"><div className="absolute top-[2px] left-1/2 -translate-x-1/2 w-[30px] h-[20px] border border-cyan shadow-[0_0_5px_rgba(0,229,255,0.5)] skew-x-12"></div></div>
+        </div>
 
-      // --- LAYER 3: Fine Detail Ring ---
-      // Rotation: Clockwise
-      ctx.save();
-      ctx.rotate(t * 1.5);
-      drawRing(s * 0.85, 2, mainColor, 5, [5, 10]);
-      ctx.restore();
+        {/* --- LAYER: CLOCK GEAR --- */}
+        <div className="absolute inset-[10%] rounded-full animate-spin-slow" style={{ animationDuration: '60s', direction: 'reverse' }}>
+            {/* Minor Ticks */}
+            <div className="absolute inset-0 rounded-full"
+                 style={{
+                     background: 'repeating-conic-gradient(transparent 0deg 5deg, #00e5ff 5deg 6deg)',
+                     maskImage: 'radial-gradient(transparent 60%, black 60%)',
+                     WebkitMaskImage: 'radial-gradient(transparent 60%, black 83%)'
+                 }}>
+            </div>
+            {/* Shield */}
+            <div className="absolute inset-0 rounded-full shadow-[0_0_25px_rgba(0,229,255,0.5)]"
+                 style={{
+                    background: 'conic-gradient(rgba(0, 229, 255, 0.6) 0deg 216deg, transparent 216deg 360deg)',
+                    maskImage: 'radial-gradient(transparent 60%, black 60%)',
+                    WebkitMaskImage: 'radial-gradient(transparent 60%, black 83%)'
+                 }}>
+            </div>
+        </div>
 
-      // --- LAYER 4: The "Hero" Ring (Orange Segment) ---
-      // Rotation: Counter-Clockwise
-      ctx.save();
-      ctx.rotate(-t * 0.8);
-      // 4a. Base Cyan Ring
-      drawRing(s * 0.7, 8, colors.cyanDim, 10);
-      // 4b. Bright Cyan highlights
-      drawRing(s * 0.7, 4, mainColor, 20, [s*0.5, s*1.2]);
-      
-      // 4c. THE ORANGE SEGMENT
-      if (activeMode !== 'WARNING') {
-          ctx.beginPath();
-          ctx.arc(0, 0, s * 0.7, Math.PI * 0.5, Math.PI * 0.85); // Specific arc section
-          ctx.strokeStyle = colors.orange;
-          ctx.lineWidth = 10;
-          ctx.shadowBlur = 30;
-          ctx.shadowColor = colors.orange;
-          ctx.stroke();
-          // White hot core of the orange segment
-          ctx.beginPath();
-          ctx.arc(0, 0, s * 0.7, Math.PI * 0.52, Math.PI * 0.83);
-          ctx.strokeStyle = colors.white;
-          ctx.lineWidth = 3;
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = colors.white;
-          ctx.stroke();
-      }
-      ctx.restore();
+        {/* --- LAYER 3: THE ARMOR RING --- */}
+        <div className="absolute inset-[16%] rounded-full animate-spin-reverse-slow" style={{ animationDuration: '25s' }}>
+            {/* Base Semi-Transparent Ring */}
+            <div className="absolute inset-0 rounded-full border-[16px] border-cyan/20"></div>
 
-      // --- LAYER 5: Inner Detailed Ring ---
-      // Rotation: Clockwise
-      ctx.save();
-      ctx.rotate(t * 2);
-      drawRing(s * 0.55, 3, mainColor, 5, [10, 15]);
-      // Add some static structure pieces
-      for(let k=0; k<4; k++) {
-         ctx.rotate(Math.PI/2);
-         ctx.beginPath();
-         ctx.moveTo(s*0.5, 0);
-         ctx.lineTo(s*0.6, 0);
-         ctx.lineWidth = 6;
-         ctx.stroke();
-      }
-      ctx.restore();
+            {/* 1. Large Armor Plate */}
+            <div className="absolute inset-0 rounded-full border-[16px] border-cyan/50"
+                 style={{
+                     maskImage: 'conic-gradient(transparent 0deg 90deg, black 90deg 360deg)',
+                     WebkitMaskImage: 'conic-gradient(transparent 0deg 90deg, black 90deg 360deg)'
+                 }}>
+            </div>
 
-      // --- LAYER 6: Turbine / Shutter Core ---
-      // Rotation: Counter-Clockwise (Fast)
-      ctx.save();
-      ctx.rotate(-t * 3);
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = mainColor;
-      for(let j=0; j<12; j++) {
-          ctx.rotate((Math.PI*2)/12);
-          ctx.beginPath();
-          // Drawn as angled shutters
-          ctx.moveTo(s*0.3, 0);
-          ctx.lineTo(s*0.45, s*0.05);
-          ctx.strokeStyle = mainColor;
-          ctx.lineWidth = 2;
-          ctx.stroke();
-      }
-      ctx.restore();
+            {/* 2. The Segment Array */}
+            {/* Solid Segments */}
+            <div className="absolute inset-0 rotate-[15deg]"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-[22px] h-[16px] bg-cyan shadow-[0_0_10px_cyan]"></div></div>
+            <div className="absolute inset-0 rotate-[27deg]"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-[22px] h-[16px] bg-cyan shadow-[0_0_10px_cyan]"></div></div>
+            <div className="absolute inset-0 rotate-[39deg]"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-[22px] h-[16px] bg-cyan shadow-[0_0_10px_cyan]"></div></div>
 
-      // --- LAYER 7: Central Core Glow ---
-      // Pulse, no rotation
-      const corePulse = 1 + Math.sin(time * 0.05) * 0.1;
-      const speakPulse = isSpeaking ? Math.random() * 0.2 : 0;
-      
-      ctx.save();
-      // Bright white center
-      ctx.beginPath();
-      ctx.arc(0, 0, s * 0.25 * corePulse, 0, Math.PI * 2);
-      ctx.fillStyle = accentColor;
-      ctx.shadowBlur = 50 * corePulse;
-      ctx.shadowColor = accentColor;
-      ctx.fill();
-      
-      // Inner bright blue rim
-      drawRing(s * 0.28 * corePulse, 5, mainColor, 30);
-      
-      // Vocal feedback flash
-      if (speakPulse > 0) {
-         drawRing(s * 0.2 * (1+speakPulse), 10, colors.white, 40);
-      }
-      ctx.restore();
+            {/* Outline Segments */}
+            <div className="absolute inset-0 rotate-[51deg]"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-[22px] h-[16px] border-2 border-cyan"></div></div>
+            <div className="absolute inset-0 rotate-[63deg]"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-[22px] h-[16px] border-2 border-cyan"></div></div>
+            <div className="absolute inset-0 rotate-[75deg]"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-[22px] h-[16px] border-2 border-cyan"></div></div>
+        </div>
 
-      ctx.resetTransform();
-      animationFrameId = requestAnimationFrame(draw);
-    };
+        {/* --- LAYER 4: THE COMPASS --- */}
+        <div className="absolute inset-[27%] rounded-full">
+            <div className="absolute inset-0 rounded-full border-[1px] border-cyan/30"></div>
+            <div className="absolute inset-[-3px] rounded-full border-[6px] border-cyan shadow-[0_0_10px_rgba(0,229,255,0.6)]"
+                 style={compassMaskStyle}>
+            </div>
+        </div>
 
-    draw();
+        {/* --- LAYER 5: APERTURE RING --- */}
+        <div className="absolute inset-[37%] rounded-full animate-spin-slow">
+            <div className="absolute inset-0 rounded-full border-[8px] border-dashed border-cyan/20"></div>
+        </div>
 
-    return () => {
-      window.removeEventListener('resize', resize);
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, [isSpeaking, isListening, activeMode]);
+        {/* --- LAYER 6: THE CORE --- */}
+        <div className={`absolute inset-[43%] rounded-full transition-all duration-500 ${getCoreGlow()}`}></div>
 
-  return <canvas ref={canvasRef} className="fixed top-0 left-0 w-full h-full z-0 pointer-events-none" />;
+        {/* --- LAYER 7: TEXT DISPLAY --- */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
+            <h1 className={`font-orbitron font-bold text-3xl tracking-[0.2em] transition-all duration-300 ${getTextColor()}`}>
+                {isListening ? "LISTENING" : "JARVIS"}
+            </h1>
+            <div className={`h-[3px] w-20 mt-2 rounded-full transition-all duration-500 relative overflow-hidden
+                ${isSpeaking ? 'bg-emerald-300/50' : 'bg-cyan/30'}
+            `}>
+                 <div className={`absolute top-0 left-0 h-full w-1/3 bg-white/60 blur-[2px] animate-pulse ${isSpeaking ? 'animate-spin-slow' : ''}`} style={{animationDuration: '3s'}}></div>
+            </div>
+            <div className="text-[10px] font-mono text-cyan/60 mt-2 tracking-[0.3em] font-bold">
+                {isListening ? "VOICE COMMAND" : "ONLINE"}
+            </div>
+        </div>
+
+    </div>
+  );
 };
 
 export default ReactorCanvas;
